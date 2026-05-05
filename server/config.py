@@ -113,18 +113,21 @@ MAX_OUTPUT_BYTES = 8_000
 
 RAW_REDACT_PATTERNS: list[tuple[str, str, str]] = [
     # Auth headers (plain HTTP format)
-    (r'(Authorization:\s*Bearer\s+)\S+',           r'\1<SAFE:{id}>',  'bearer_token'),
-    (r'(Authorization:\s*Basic\s+)\S+',            r'\1<SAFE:{id}>',  'basic_auth'),
-    (r'(Authorization:\s*Token\s+)\S+',            r'\1<SAFE:{id}>',  'api_token'),
+    # Negative lookahead `(?!<SAFE:)` prevents re-vaulting an existing SAFE token
+    # if one was already substituted upstream (e.g. by the report generator's
+    # backstop sanitize on user-pasted text fields).
+    (r'(Authorization:\s*Bearer\s+)(?!<SAFE:)\S+', r'\1<SAFE:{id}>',  'bearer_token'),
+    (r'(Authorization:\s*Basic\s+)(?!<SAFE:)\S+',  r'\1<SAFE:{id}>',  'basic_auth'),
+    (r'(Authorization:\s*Token\s+)(?!<SAFE:)\S+',  r'\1<SAFE:{id}>',  'api_token'),
     # Auth headers in JSON response bodies (e.g. httpbin echoing headers back)
-    (r'(?i)("Authorization":\s*"Bearer\s+)([^"]+)(")',
+    (r'(?i)("Authorization":\s*"Bearer\s+)((?:(?!<SAFE:)[^"])+)(")',
                                                    r'\1<SAFE:{id}>\3', 'bearer_token'),
-    (r'(?i)("Authorization":\s*"Token\s+)([^"]+)(")',
+    (r'(?i)("Authorization":\s*"Token\s+)((?:(?!<SAFE:)[^"])+)(")',
                                                    r'\1<SAFE:{id}>\3', 'api_token'),
     # Cookies — vault VALUES only, keep names visible.
     # Convention: group(1) is the prefix kept verbatim; sensitive_value = rest of match.
     # Pattern A: first cookie after Set-Cookie:/Cookie: header
-    (r'(?i)((?:set-cookie:|cookie:)\s*[A-Za-z_][\w.\-]{0,40}=)[^;\r\n]+',
+    (r'(?i)((?:set-cookie:|cookie:)\s*[A-Za-z_][\w.\-]{0,40}=)(?!<SAFE:)[^;\r\n]+',
                                                    r'\1<SAFE:{id}>',  'cookie'),
     # Pattern B: subsequent cookies separated by `;` or whitespace, value ≥20 chars
     (r'((?:[;\s])[A-Za-z_][\w.\-]{1,40}=)[A-Za-z0-9+/_\-=.%]{20,}',
@@ -170,10 +173,10 @@ RAW_REDACT_PATTERNS: list[tuple[str, str, str]] = [
     # ── AWS credentials ───────────────────────────────────────────────────────
     (r'AKIA[0-9A-Z]{16}',                          '<SAFE:{id}>',     'aws_access_key'),
     (r'ASIA[0-9A-Z]{16}',                          '<SAFE:{id}>',     'aws_sts_key'),    # STS temp creds (Cognito uses these)
-    (r'(?i)(aws_secret_access_key\s*=\s*)\S+',     r'\1<SAFE:{id}>',  'aws_secret'),
-    (r'(?i)(aws_session_token\s*=\s*)\S+',         r'\1<SAFE:{id}>',  'aws_session_token'),
+    (r'(?i)(aws_secret_access_key\s*=\s*)(?!<SAFE:)\S+', r'\1<SAFE:{id}>', 'aws_secret'),
+    (r'(?i)(aws_session_token\s*=\s*)(?!<SAFE:)\S+',     r'\1<SAFE:{id}>', 'aws_session_token'),
     # AWS SigV4 Authorization header (signed request)
-    (r'(?i)(Authorization:\s*AWS4-HMAC-SHA256\s+)([^\r\n]+)',
+    (r'(?i)(Authorization:\s*AWS4-HMAC-SHA256\s+)((?:(?!<SAFE:)[^\r\n])+)',
                                                    r'\1<SAFE:{id}>',  'aws_sigv4'),
     # ── Azure ─────────────────────────────────────────────────────────────────
     # Azure SAS token (sig= ... &se= ...) — keep "?sig=" / "&sig=" visible
@@ -188,7 +191,7 @@ RAW_REDACT_PATTERNS: list[tuple[str, str, str]] = [
     # (SaaS tokens deduplicated above — moved before generic key/token/secret/password)
     # postgres://user:pass@host  /  mysql://user:pass@host  /  mongodb://user:pass@host
     # 3-group form: prefix=protocol://user:, value=password, suffix=@
-    (r'\b((?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis)://[^:\s]+:)([^@\s]+)(@)',
+    (r'\b((?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis)://[^:\s]+:)((?:(?!<SAFE:)[^@\s])+)(@)',
                                                    r'\1<SAFE:{id}>\3', 'db_password'),
     # Private keys
     (r'-----BEGIN [A-Z ]+PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+PRIVATE KEY-----',
@@ -261,7 +264,7 @@ RAW_REDACT_PATTERNS: list[tuple[str, str, str]] = [
 
     # ── Personal name fields in JSON (PII) — 3 groups so quotes are preserved ─
     # firstName / lastName / displayName / fullName as JSON keys
-    (r'(?i)("(?:first|last|full|display)[_-]?name"\s*:\s*")([^"]{1,80})(")',
+    (r'(?i)("(?:first|last|full|display)[_-]?name"\s*:\s*")((?:(?!<SAFE:)[^"]){1,80})(")',
                                                    r'\1<SAFE:{id}>\3', 'pii_name'),
 
     # ── Phone numbers (E.164 and common formats) ──────────────────────────────

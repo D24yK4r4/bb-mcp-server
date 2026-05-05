@@ -120,9 +120,10 @@ def sanitize(output: str, program: str, source: str) -> str:
     Truncate to safe size limits.
     Returns the sanitized string.
 
-    Protection: between patterns, already-vaulted regions (existing <SAFE:...> tokens)
-    are masked with placeholders so subsequent patterns can't match the literal type
-    name (e.g. "token" inside <SAFE:bearer_token:...>) and double-vault.
+    Protection against re-vaulting existing SAFE tokens is enforced at the
+    pattern level (see config.py — patterns with greedy value matchers all
+    use `(?!<SAFE:)` negative lookahead or exclude `<` from their character
+    class). No mask/unmask layer is needed here.
     """
     result = output
 
@@ -131,16 +132,6 @@ def sanitize(output: str, program: str, source: str) -> str:
     all_patterns = program_patterns + REDACT_PATTERNS
 
     for pattern, _replacement_template, vault_type in all_patterns:
-        # Mask existing SAFE tokens so pattern doesn't match into them
-        masked: list[str] = []
-
-        def _stash(m: re.Match) -> str:
-            masked.append(m.group(0))
-            # Use a placeholder that no pattern will match — a NUL + index + NUL
-            return f'\x00SAFE_PLACEHOLDER_{len(masked)-1}\x00'
-
-        result = _SAFE_TOKEN_RE.sub(_stash, result)
-
         def replace_match(m: re.Match, _vtype: str = vault_type) -> str:
             groups = m.lastindex or 0
 
@@ -173,10 +164,6 @@ def sanitize(output: str, program: str, source: str) -> str:
             return f'{prefix}<SAFE:{_vtype}:{safe_id}>{suffix}'
 
         result = pattern.sub(replace_match, result)
-
-        # Restore stashed SAFE tokens
-        for i, original in enumerate(masked):
-            result = result.replace(f'\x00SAFE_PLACEHOLDER_{i}\x00', original)
 
     # Pass 2: JSON-context UUID retagging — promote generic <SAFE:uuid:..> tokens
     # to typed <SAFE:userid_uuid:..>, <SAFE:programid_uuid:..>, etc. based on the
