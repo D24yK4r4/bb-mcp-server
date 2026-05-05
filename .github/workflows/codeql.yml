@@ -1,0 +1,51 @@
+name: CodeQL
+
+# CodeQL static analysis — security-and-quality query suite over the Python
+# source. Runs on push and PR to main, plus weekly to catch newly-published
+# CVEs against existing code.
+#
+# Free for public repos via GitHub-maintained Actions.
+# Results land in: Security tab → Code scanning alerts.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Mondays 06:17 UTC — off-peak, low contention, weekly cadence.
+    - cron: '17 6 * * 1'
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # security-and-quality is broader than security-extended; for a
+          # security-tooling repo the extra checks are worth the few extra
+          # minutes per run.
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
