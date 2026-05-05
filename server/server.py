@@ -28,7 +28,13 @@ mcp = FastMCP(
         'Hunt for High, Critical, or Exceptional severity findings. Low/Medium '
         'are a waste of time unless they chain into a critical impact — always '
         'ask "can this chain to critical?" before investing time.\n'
-        'create_report rejects severity below High unless force=True is set.\n'
+        'A finding without a working safe PoC is a hypothesis, not a bug. '
+        'Demonstrate impact with reproducible non-destructive exploitation '
+        '(alert(document.domain), \' OR 1=1, SLEEP, IMDS read, id/whoami, own '
+        'test accounts). If you cannot exploit it within program rules, it is '
+        'not a finding — keep digging or pivot.\n'
+        'create_report rejects severity below High AND empty PoC fields, '
+        'unless force=True is set.\n'
         'Default rate limit on automated tools is 5 req/sec (programs typically '
         'allow 5–10/sec) — stay polite, do not bypass.\n'
         'All sensitive values are vaulted locally — you receive <SAFE:id> tokens. '
@@ -353,8 +359,9 @@ def create_report(
     Returns paths to both files.
 
     Severity gate: rejects findings below High severity unless force=True.
-    Bug bounty mission is high-impact only — set force=True only if the
-    operator has explicitly decided to submit a Low/Medium finding anyway.
+    PoC gate: rejects findings without reproduction artifacts unless force=True.
+    Bug bounty mission is high-impact only AND demonstrated — set force=True
+    only if the operator has explicitly decided to submit anyway.
     """
     from config import MIN_REPORT_SEVERITY
     sev_norm = severity.strip().lower()
@@ -364,6 +371,20 @@ def create_report(
             f'impact-only (High/Critical/Exceptional). '
             f'If you really want to submit this anyway, re-call with force=True '
             f'after confirming with the operator.'
+        )
+
+    # PoC gate — a finding without proof is a hypothesis, not a bug.
+    poc_present = any(
+        s.strip() for s in (poc_request, poc_response, poc_curl)
+    )
+    if not poc_present and not force:
+        return (
+            'ERROR: no PoC provided — a finding without reproduction '
+            'artifacts is a hypothesis, not a bug. Fill in poc_request, '
+            'poc_response, and/or poc_curl with the working safe-exploit '
+            'evidence before submitting. If you really mean to ship a '
+            'theoretical-impact report, re-call with force=True after '
+            'operator confirmation.'
         )
     try:
         sanitized_path, full_path = generate_report(
