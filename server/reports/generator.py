@@ -194,7 +194,9 @@ Reasoning: [fill before submission]
 
     repro_path = poc_dir / 'repro.sh'
     repro_path.write_text(repro_sanitized, encoding='utf-8')
-    os.chmod(repro_path, 0o750)
+    # 0o700 — owner-only. Sanitized PoC has no real values, but least-privilege
+    # is the right default; operator runs the script as themselves.
+    os.chmod(repro_path, 0o700)
 
     # ── Write full report to vault (chmod 600, operator only) ─────────────────
 

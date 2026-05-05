@@ -219,8 +219,8 @@ except ValueError as e:
 section('6. RATE LIMITING — verify delay between tool calls')
 
 # Force rate limit state to 0 for this test
-import core.executor as executor_mod
-executor_mod._last_run['dig'] = 0.0
+from core.executor import _last_run
+_last_run['dig'] = 0.0
 
 t1 = time.monotonic()
 dig('google.com', 'A', PROGRAM)

@@ -10,7 +10,6 @@ Approval decisions persist for the session only (never written to disk).
 
 import subprocess
 import time
-from pathlib import Path
 
 from config import SCRIPTS_DIR, WORK_DIR
 from core.analyzer import analyze, format_approval_request

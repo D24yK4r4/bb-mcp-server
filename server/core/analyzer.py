@@ -3,9 +3,7 @@ Script analyzer — scans a script's source code before the approval
 request is shown to the operator. Produces a risk score and verdict.
 """
 
-import ast
 import re
-from pathlib import Path
 
 from config import SCRIPTS_BLOCKED, SCRIPTS_DIR
 

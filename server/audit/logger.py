@@ -32,6 +32,10 @@ def _last_hash(log_path: Path) -> str:
                 entry = json.loads(line)
                 return entry.get('hash', hashlib.sha256(b'genesis').hexdigest())
     except Exception:
+        # Graceful degradation: a missing or malformed audit log file means we
+        # haven't written any entries yet (or the file was tampered/deleted).
+        # Fall back to the genesis hash; verify_audit_log will surface any
+        # subsequent chain inconsistency on demand.
         pass
     return hashlib.sha256(b'genesis').hexdigest()
 

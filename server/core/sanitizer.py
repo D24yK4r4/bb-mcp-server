@@ -11,7 +11,6 @@ Three-pass design:
 """
 
 import re
-from pathlib import Path
 from config import REDACT_PATTERNS, MAX_OUTPUT_LINES, MAX_OUTPUT_BYTES, BB_ROOT
 from vault import safe as vault
 
@@ -43,11 +42,7 @@ _UUID_CONTEXT_KEYS: list[tuple[str, str]] = [
 # Build retag patterns: "userId":"<SAFE:uuid:abc12345>" -> retag the SAFE token type
 _RETAG_PATTERNS: list[tuple[re.Pattern, str]] = []
 for key_norm, new_type in _UUID_CONTEXT_KEYS:
-    # Match "<key>":"<SAFE:uuid:id>" where <key> may have underscores/dashes/case variants
-    key_chars = ''.join(f'[{c.upper()}{c.lower()}][_-]?' for c in key_norm)
-    # Tighten: just allow case variants and optional separators
-    pat = rf'("(?:[A-Za-z]+[_-]?)*?{key_norm}"|"{key_norm}"|"{key_norm.upper()}")\s*:\s*"<SAFE:uuid:([0-9a-f]{{8}})>"'
-    # Simpler & faster: just case-insensitive direct key match
+    # Match "<key>":"<SAFE:uuid:id>" — case-insensitive direct key match.
     pat = rf'(?i)("[A-Za-z_]*{key_norm}"\s*:\s*")<SAFE:uuid:([0-9a-f]{{8}})>(")'
     _RETAG_PATTERNS.append((re.compile(pat), new_type))
 
@@ -108,9 +103,6 @@ def _load_program_patterns(program: str) -> list:
 
     _PROGRAM_PATTERN_CACHE[program] = patterns
     return patterns
-
-
-_SAFE_TOKEN_RE = re.compile(r'<SAFE:[^>]+>')
 
 
 def sanitize(output: str, program: str, source: str) -> str:

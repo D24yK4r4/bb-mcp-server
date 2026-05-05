@@ -75,7 +75,8 @@ def count_lines(file_path: str, program: str) -> str:
     if not path.exists():
         return f'File not found: {file_path}'
 
-    count = sum(1 for _ in open(path, 'r', encoding='utf-8', errors='ignore'))
+    with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+        count = sum(1 for _ in f)
     audit.log(program, 'file_count', {'file': file_path, 'lines': count})
     return f'{file_path}: {count} lines'
 

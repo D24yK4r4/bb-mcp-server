@@ -55,7 +55,7 @@ bb-mcp-server/                    ← The MCP server (Python)
 │   ├── sanitizer.py              # 60+ regex patterns + vault writer
 │   ├── scope.py                  # Scope gate — reads brief.md before every command
 │   ├── approver.py               # Two-step approval: request → confirm
-│   └── analyzer.py               # AST + regex script analysis before approval
+│   └── analyzer.py               # regex-based script analysis before approval
 │
 ├── tools/
 │   ├── recon.py                  # subfinder, amass, assetfinder, httpx, nmap,
@@ -171,7 +171,7 @@ Claude requests a tool call
 Claude calls request_script_approval(script, reason, program)
          ↓
     analyzer.analyze(script_path)
-    AST + regex scan of script source
+    regex-based scan of script source
          ↓
     In SCRIPTS_BLOCKED list?  (reverse_shell_*, webshell.*, exfil_*, etc.)
     → BLOCKED. Never runs. Log attempt.
