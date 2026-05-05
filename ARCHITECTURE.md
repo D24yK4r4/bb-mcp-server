@@ -504,19 +504,23 @@ them.** Skills are third-party — written by the security community and the
 operator's own additions. Drop any compatible skill into `~/.claude/skills/`
 and the trigger hooks pick it up automatically.
 
-### Compatible skill packs (examples)
+### Compatible skill areas (examples)
 
-| Skill area | What it covers | Where to find it |
-|------------|----------------|------------------|
-| OWASP Top 10 / ASVS | Code review, auth/authz, input handling | Anthropic skill library, community |
-| Cloud Security | AWS/Azure/GCP attack surface, SSRF→metadata, IAM | Community packs |
-| Web App Testing | Playwright-based UI flow testing | Anthropic skill library |
-| Smart Contract Audit | Solidity, Slither, Trail of Bits workflow | Trail of Bits skill pack |
-| YARA Authoring | Detection rules for malware | Community |
-| CodeQL Audit | Static analysis with SARIF output | Trail of Bits skill pack |
-| Snyk Fix / Learning | Remediation + dependency hygiene | Snyk skill pack |
-| SecLists / Payloads | Wordlists + injection payloads | Community awesome-security pack |
-| Pentest Playbooks | CTF / generic web pentest checklists | Community |
+The trigger hooks recognize the following skill areas. Any pack — community,
+vendor, or your own — that fits the area works once dropped into
+`~/.claude/skills/`. Operators source skills from wherever they prefer.
+
+| Skill area | What it covers |
+|------------|----------------|
+| Web app code review | OWASP Top 10 / ASVS-style checklists, auth/authz, input handling |
+| Cloud attack surface | AWS / Azure / GCP — SSRF→metadata, bucket misconfig, IAM |
+| UI / browser flow testing | Headless browser-driven SPA testing |
+| Smart contract audit | Solidity static analysis + audit workflow |
+| Malware detection rule authoring | YARA-style rule writing |
+| Static code analysis | SARIF-emitting analyzers |
+| Dependency hygiene | Advisory checks + automated remediation |
+| Wordlists & payload variants | Injection corpus, fuzzing inputs |
+| Pentest playbooks | CTF / generic web pentest checklists |
 
 The **trigger hook** maps context signals → skill name. Adding a new skill
 is two changes: drop the file, add a trigger pattern.

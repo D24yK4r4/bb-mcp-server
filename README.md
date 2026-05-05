@@ -97,19 +97,21 @@ chmod +x hooks/*.sh
 This server is designed to **work alongside** Claude Code skills, not bundle
 them. The trigger hooks pick up any skill dropped into `~/.claude/skills/`.
 
-Recommended packs (all third-party, install separately):
+Skill areas you might want to plug in (any source — community packs,
+vendor releases, your own — all work the same once they're in the skills
+directory):
 
 | Skill area | Use when |
 |------------|----------|
-| OWASP Top 10 / ASVS | Code review, auth/authz, OWASP Top 10:2025 |
-| Cloud Security | Target on AWS/Azure/GCP — SSRF→metadata, S3/Blob/GCS |
-| Web App Testing | Playwright UI flow testing |
-| Smart Contract Audit | Solidity / Slither / Trail of Bits workflow |
-| YARA Authoring | Detection rules for malware |
-| CodeQL Audit | Static analysis with SARIF output |
-| Snyk Fix / Learning | Remediation + dependency hygiene |
-| SecLists / Payloads | Wordlists + injection payloads (`/sqli-test`, `/xss-test`) |
-| Pentest Playbooks | CTF / generic web pentest checklists |
+| Web app code review | Auditing application code against OWASP Top 10 / ASVS-style checklists |
+| Cloud attack surface | Target on AWS / Azure / GCP — SSRF→metadata, bucket misconfig, IAM |
+| UI / browser flow testing | Driving an SPA via headless browser |
+| Smart contract audit | Solidity static analysis + audit workflow |
+| Malware detection rule authoring | Writing YARA-style rules |
+| Static code analysis | SARIF-emitting analyzers |
+| Dependency hygiene | Pinning, advisory checks, automated remediation |
+| Wordlists & payload variants | Injection corpus, fuzzing inputs |
+| Pentest playbooks | CTF / generic web pentest checklists |
 
 The trigger map (which skill loads on which signal) is configured in
 [`hooks/skill-context-trigger.sh`](hooks/skill-context-trigger.sh) — extend
@@ -228,10 +230,9 @@ MIT — see [`LICENSE`](LICENSE).
 
 ## Acknowledgements
 
-- The skill ecosystem (OWASP, cloud-security, codeql-audit, snyk-fix,
-  webapp-testing, yara-authoring, secure-contracts, awesome-security,
-  secskills-pentest, agentic-security, …) is third-party. Each pack has its
-  own license — check before redistributing.
+- All Claude Code skills are third-party. This server is just the harness
+  around them — install the packs you need separately, and check each
+  pack's license before redistributing.
 - The Bugcrowd VRT (in `reference-templates/bugcrowd_vrt.md`) is sourced from
   the public taxonomy at <https://bugcrowd.com/vulnerability-rating-taxonomy>.
 - HackerOne and Intigriti report field references are derived from the
