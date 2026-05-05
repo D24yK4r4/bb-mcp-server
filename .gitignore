@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.egg-info/
+.tox/
+.venv/
+venv/
+env/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local config / secrets — never commit
+.mcp.json
+.claude/settings.local.json
+.env
+.env.local
+*.pem
+*.key
+
+# Local workspace data — operator-specific
+programs/
+recon/
+findings/
+loot/
+notes.md
+tracker.md
+dashboard.md
+
+# Vault — must never ship
+vault/
+.bb-vault/
+.bb_safe/
+.hive/
+
+# Build artifacts
+build/
+dist/

@@ -1,0 +1,5 @@
+# Bug Bounty MCP Server — pinned dependencies
+# Install with: pip3 install -r requirements.txt
+# Audit with:   pip-audit -r requirements.txt
+
+mcp>=1.6.0

@@ -1,0 +1,53 @@
+{
+  "_comment": "Copy to .claude/settings.json in your bug bounty workspace. Adjust paths.",
+  "permissions": {
+    "allow": [
+      "mcp__bb-hunter__check_scope",
+      "mcp__bb-hunter__consult_skill",
+      "mcp__bb-hunter__vault_lookup",
+      "mcp__bb-hunter__grep_file",
+      "mcp__bb-hunter__list_recon_files",
+      "mcp__bb-hunter__read_filtered",
+      "mcp__bb-hunter__count_lines",
+      "mcp__bb-hunter__save_note",
+      "mcp__bb-hunter__verify_audit_log",
+      "mcp__bb-hunter__request_script_approval",
+      "mcp__bb-hunter__confirm_script_execution"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /ABSOLUTE/PATH/TO/bb-mcp-server/hooks/autoload-skills.sh",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/ABSOLUTE/PATH/TO/bb-mcp-server/hooks/pre-tool-confirm.sh",
+            "timeout": 3000
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/ABSOLUTE/PATH/TO/bb-mcp-server/hooks/skill-context-trigger.sh",
+            "timeout": 3000
+          }
+        ]
+      }
+    ]
+  }
+}
