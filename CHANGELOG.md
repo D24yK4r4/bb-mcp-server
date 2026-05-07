@@ -60,6 +60,13 @@ hard-block deny list that prevents Claude from bypassing the MCP via raw
   alerts and updates), and `CHANGELOG.md` itself.
 
 ### Changed
+- **Tightened default rate limits.** `TOOL_RATE_LIMIT` lowered from 5 to 2
+  req/sec, and `SAFE_RATE_PER_ZONE` set to 2 req/sec to match. Rationale:
+  CDN/WAF aggregate per-zone limits (Cloudflare, Akamai) are usually lower
+  than the per-app stated limit, and a single 429 risks an IP ban. Programs
+  that explicitly allow higher rates can override per-program. Comment on
+  the constant marks 3 req/sec as the upper bound that should not be raised
+  without operator review.
 - **`.mcp.example.json`** — `command` now points to `server/launch.sh` so
   Claude Code spawns the server through the firejail wrapper. Existing
   installs that have already copied to `.mcp.json` should re-copy.

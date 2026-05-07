@@ -41,6 +41,11 @@ if command -v firejail >/dev/null 2>&1; then
     --nonewprivs
     --seccomp
     --private-dev
+    # bb-mcp-server install dir — read-only so the server can't modify its
+    # own code at runtime. Required when bb-mcp-server lives outside BB_ROOT
+    # (the normal install pattern).
+    --whitelist="$SCRIPT_DIR"
+    --read-only="$SCRIPT_DIR"
     --whitelist="$BB_ROOT"
     --whitelist="$BB_VAULT"
   )

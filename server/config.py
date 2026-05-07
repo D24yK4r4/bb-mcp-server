@@ -80,7 +80,10 @@ SCRIPTS_BLOCKED = {
 #     -rate-limit, dalfox --delay). This is what actually shapes outbound
 #     traffic to the target.
 
-TOOL_RATE_LIMIT = 5  # req/sec — most programs allow 5–10/sec; stay polite.
+TOOL_RATE_LIMIT = 2  # req/sec — leave headroom under program caps. NEVER raise above 3
+                     # without operator review; CF/WAF aggregate per-zone limits are usually
+                     # lower than the per-app stated limit, and a single 429 risks IP ban.
+                     # Programs that explicitly allow 5–10/sec can override per-program.
 
 # Per-host 429 circuit breaker. Once a host returns 429 (or related throttle
 # signal), refuse further requests to that host AND its parent zone for
@@ -91,7 +94,7 @@ BREAKER_STATE_FILE = '/tmp/bb_429_breaker.json'
 # Per-zone aggregate cap. Total requests across all bb-hunter tools to a single
 # zone (e.g. *.example.com) must stay <= SAFE_RATE_PER_ZONE per second.
 # Trailing 1-second window. Tool wrappers can opt in via aggregate_rate_check.
-SAFE_RATE_PER_ZONE = 5              # req/sec aggregate per zone
+SAFE_RATE_PER_ZONE = 2              # req/sec aggregate per zone — match TOOL_RATE_LIMIT default
 RATE_TRACKER_FILE  = '/tmp/bb_rate_tracker.json'
 
 # Global rate ceiling. Total outbound across ALL bb-hunter tools (every zone,
