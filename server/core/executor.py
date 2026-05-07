@@ -4,7 +4,8 @@ Safe subprocess executor.
 - Tool allowlist enforced
 - Argument validation (metacharacters, traversal, null bytes)
 - Clean environment (no inherited secrets)
-- Rate limiting per tool
+- Per-tool MCP-side cooldown (coarse — guards against runaway agent loops)
+- Global rate ceiling across ALL bb-hunter tools (hard cap on outbound rate)
 - Forbidden payload patterns blocked
 - Scope gate for network tools
 """
@@ -19,10 +20,12 @@ from config import (
     ALLOWED_TOOLS,
     BLOCKED_TOOLS,
     FORBIDDEN_PAYLOAD_PATTERNS,
+    GLOBAL_RATE_LIMIT,
     RATE_LIMITS,
     SHELL_METACHARACTERS,
     WORK_DIR,
 )
+from core import circuit_breaker as cb
 from core import scope as scope_mod
 
 # Track last execution time per tool for rate limiting
@@ -104,6 +107,19 @@ def _validate_path(path: str, mode: str = 'read') -> None:
         )
 
 
+# Per-tool expected outbound request rate (req/sec) used for the global budget
+# reservation. Single-shot tools count as 1; fan-out tools reserve their
+# expected --rate-limit value. Defaults to 1 if unlisted.
+TOOL_EXPECTED_RPS = {
+    'subfinder':   1, 'amass':       1, 'assetfinder': 1,
+    'dig':         1, 'whois':       1, 'whatweb':     1,
+    'curl':        1, 'nmap':        2,
+    'httpx':       2, 'ffuf':        2, 'feroxbuster': 2,
+    'katana':      2, 'nuclei':      2, 'sqlmap':      2,
+    'dalfox':      2,
+}
+
+
 def run(
     tool: str,
     args: list[str],
@@ -111,6 +127,7 @@ def run(
     target: str | None = None,
     timeout: int = 120,
     cwd: str | None = None,
+    expected_request_per_sec: int | None = None,
 ) -> tuple[str, int]:
     """
     Execute a tool safely.
@@ -122,12 +139,15 @@ def run(
         target:  Target domain/IP (required for network tools)
         timeout: Max execution time in seconds
         cwd:     Working directory (defaults to WORK_DIR)
+        expected_request_per_sec: Budget to reserve against the global cap.
+                 Defaults to TOOL_EXPECTED_RPS[tool] or 1.
 
     Returns:
         (stdout_output, return_code)
 
     Raises:
-        ValueError:      Allowlist, arg validation, scope, or payload violation
+        ValueError:      Allowlist, arg validation, scope, payload, or global
+                         rate violation
         FileNotFoundError: Tool not found
         subprocess.TimeoutExpired: Execution exceeded timeout
     """
@@ -146,10 +166,25 @@ def run(
         if not allowed:
             raise ValueError(f'Scope violation: {reason}')
 
-    # 4. Rate limit
+    # 4. Per-tool cooldown (coarse — guards against runaway agent loops)
     _rate_limit(tool)
 
-    # 5. Execute
+    # 5. Global rate cap. Total outbound across ALL bb-hunter tools (every
+    #    zone, every program, every concurrent invocation) must stay
+    #    <= GLOBAL_RATE_LIMIT per second. Local file utilities don't count.
+    if tool in NETWORK_TOOLS:
+        budget = expected_request_per_sec
+        if budget is None:
+            budget = TOOL_EXPECTED_RPS.get(tool, 1)
+        acquired, waited = cb.acquire_global_budget(budget)
+        if not acquired:
+            raise ValueError(
+                f'Global rate cap reached ({GLOBAL_RATE_LIMIT} req/s across all '
+                f'bb-hunter tools). Waited {waited:.1f}s for budget — refusing '
+                f'{tool} launch. Pause other running scans and retry.'
+            )
+
+    # 6. Execute
     cmd = [tool_path] + args
     result = subprocess.run(
         cmd,

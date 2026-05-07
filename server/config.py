@@ -82,6 +82,25 @@ SCRIPTS_BLOCKED = {
 
 TOOL_RATE_LIMIT = 5  # req/sec — most programs allow 5–10/sec; stay polite.
 
+# Per-host 429 circuit breaker. Once a host returns 429 (or related throttle
+# signal), refuse further requests to that host AND its parent zone for
+# COOLDOWN_AFTER_429 seconds. State persisted across process restarts.
+COOLDOWN_AFTER_429 = 300            # 5 minutes — long enough for sliding-window throttles to fully reset
+BREAKER_STATE_FILE = '/tmp/bb_429_breaker.json'
+
+# Per-zone aggregate cap. Total requests across all bb-hunter tools to a single
+# zone (e.g. *.example.com) must stay <= SAFE_RATE_PER_ZONE per second.
+# Trailing 1-second window. Tool wrappers can opt in via aggregate_rate_check.
+SAFE_RATE_PER_ZONE = 5              # req/sec aggregate per zone
+RATE_TRACKER_FILE  = '/tmp/bb_rate_tracker.json'
+
+# Global rate ceiling. Total outbound across ALL bb-hunter tools (every zone,
+# every program, every concurrent invocation) must stay <= GLOBAL_RATE_LIMIT
+# per second. Enforced inside the executor for every network-tool launch.
+GLOBAL_RATE_LIMIT      = 5          # req/sec aggregate across every tool, every zone
+GLOBAL_RATE_FILE       = '/tmp/bb_global_rate.json'
+GLOBAL_BUDGET_MAX_WAIT = 10         # max seconds to block waiting for budget before refusing
+
 RATE_LIMITS: dict[str, float] = {
     'subfinder':    0.2,
     'amass':        0.2,

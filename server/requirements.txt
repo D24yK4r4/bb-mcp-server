@@ -2,4 +2,4 @@
 # Install with: pip3 install -r requirements.txt
 # Audit with:   pip-audit -r requirements.txt
 
-mcp>=1.6.0
+mcp>=1.6.0,<2.0.0

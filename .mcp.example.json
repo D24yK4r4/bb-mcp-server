@@ -1,9 +1,9 @@
 {
-  "_comment": "Copy to .mcp.json in your project root. Adjust paths to match your install.",
+  "_comment": "Copy to .mcp.json in your project root. Adjust paths to match your install. server/launch.sh wraps the server in firejail when available; falls back to plain python3 otherwise.",
   "mcpServers": {
     "bb-hunter": {
-      "command": "python3",
-      "args": ["/ABSOLUTE/PATH/TO/bb-mcp-server/server/server.py"],
+      "command": "/ABSOLUTE/PATH/TO/bb-mcp-server/server/launch.sh",
+      "args": [],
       "env": {
         "BB_ROOT":    "/ABSOLUTE/PATH/TO/your-bug-bounty-workspace",
         "BB_VAULT":   "/ABSOLUTE/PATH/TO/local-vault-dir",
