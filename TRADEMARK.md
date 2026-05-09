@@ -71,7 +71,7 @@ If you want to use the name in a way not explicitly permitted above
 plugin, or a commercial product) and you're not sure whether it's OK,
 just ask:
 
-📧 **`202512604+D24yK4r4@users.noreply.github.com`**
+📧 **`d24yk4r4@intigriti.me`**
 
 Most reasonable requests are granted; the goal is to prevent confusion,
 not to gatekeep usage.

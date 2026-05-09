@@ -70,7 +70,7 @@ flat-rate per organisation, paid in EUR.
 
 ## How to enquire
 
-Email **`202512604+D24yK4r4@users.noreply.github.com`** with:
+Email **`d24yk4r4@intigriti.me`** with:
 
 1. Organisation name + size (employees / revenue order of magnitude).
 2. Intended use case — internal tool, embedded in product, hosted
