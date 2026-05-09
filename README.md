@@ -232,14 +232,60 @@ Dual-licensed under either of:
 
 at your option. Both are strong copyleft licences with a network-use clause:
 running a modified version as a hosted service obliges you to make the source
-of your modifications available to the users of that service. This is
-deliberate — bb-mcp-server is a security tool, and we don't want forks
-re-emerging as closed-source SaaS.
+of your modifications available to the users of that service.
 
-EUPL-1.2 is the primary licence (EU-drafted, multilingual, with an explicit
-compatibility list covering AGPL-3.0, GPL-2.0/3.0, MPL-2.0, OSL, and others —
-see Appendix of the EUPL). AGPL-3.0 is offered for projects or jurisdictions
-where it is more familiar.
+Source files carry the SPDX header
+`# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0`.
+
+### Why this licence and not MIT / Apache / GPLv3
+
+bb-mcp-server was originally MIT, and was relicensed in 2026-05. Four reasons:
+
+1. **It closes the SaaS loophole.** MIT lets a company take the code,
+   modify it, and never share back — including running it as a hosted
+   service. GPLv3 has the same problem: it only triggers on
+   *distribution*, not on network use. EUPL-1.2 (Article 13) and
+   AGPL-3.0 (Section 13) both treat "communication to the public" /
+   network use as triggering source disclosure. For an MCP **server** —
+   something explicitly designed to be run as a service — closing this
+   loophole is the whole point.
+2. **It matches the project's jurisdiction.** EUPL-1.2 is drafted in EU
+   legal language, has 23 official translations all legally equivalent,
+   and references EU law for warranty / liability — so an EU court
+   doesn't have to translate or reinterpret US-style "AS-IS"
+   boilerplate. AGPL-3.0 is the global fallback for users outside the
+   EU who find EUPL unfamiliar.
+3. **It protects the work as a security tool.** A bug-bounty MCP server
+   is exactly the kind of code that gets vendored into commercial
+   pentest platforms. Without copyleft, hardening work (rate caps,
+   scope checks, vault, audit log, validator gate) can be silently
+   absorbed into a closed product, and the next operator never sees the
+   safety improvements made downstream. Copyleft + network clause means
+   anyone running a modified bb-mcp-server has to expose their
+   modifications — defenders win, gatekeepers don't.
+4. **Dual licensing keeps it adoptable.** EUPL-1.2's Appendix
+   explicitly lists AGPL-3.0, GPL-2.0/3.0, MPL-2.0, OSL, EPL and others
+   as compatible, so derivative works can be relicensed without
+   dead-ends. AGPL-3.0 is what many security tools already use (MISP,
+   OpenCTI, BloodHound CE, parts of OWASP ZAP), so it's familiar to
+   security-focused contributors. Offering both lets a contributor or
+   downstream project pick whichever fits their stack.
+
+**The honest tradeoff:** a small fraction of corporate users won't touch
+AGPL / EUPL because their internal legal policy bans copyleft network-use
+clauses (Google famously bans AGPL internally; many startups follow).
+That adoption is intentionally given up — those are the same orgs most
+likely to absorb the code into a closed product. MIT optimised for
+adoption-at-any-cost; EUPL / AGPL optimises for *"the people who use this
+share back."*
+
+### Backwards compatibility for previous downloaders
+
+bb-mcp-server v0.2.0 and earlier were released under the MIT licence.
+Anyone who obtained those versions retains the MIT licence on those
+copies indefinitely — the relicence applies only to commits and
+releases dated 2026-05-09 or later. You don't need to re-licence or
+re-download anything you already had.
 
 ---
 
