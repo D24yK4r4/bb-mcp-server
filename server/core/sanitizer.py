@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0
 """
 Output sanitizer — scans tool output for sensitive patterns,
 vaults the values locally, and replaces them with <SAFE:type:id> tokens.

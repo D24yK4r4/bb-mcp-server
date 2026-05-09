@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0
 """Vulnerability scanning tool wrappers — nuclei, sqlmap, dalfox."""
 
 from config import BB_ROOT

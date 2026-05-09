@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0
 """
 Append-only audit logger with SHA-256 hash chain.
 Every entry links to the previous — tampering is detectable.

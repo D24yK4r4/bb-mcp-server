@@ -150,7 +150,8 @@ prompt. From there:
 bb-mcp-server/
 ├── README.md                  ← this file
 ├── ARCHITECTURE.md            ← full design + data flow + security layers
-├── LICENSE                    ← MIT
+├── LICENSE                    ← EUPL-1.2 (primary)
+├── LICENSE-AGPL-3.0           ← AGPL-3.0 (alternative, at your option)
 │
 ├── server/                    ← the MCP server (Python)
 │   ├── server.py              ← FastMCP entry point + tool registration
@@ -224,7 +225,21 @@ layers stack on top of each other:
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+Dual-licensed under either of:
+
+- **[European Union Public Licence v1.2](LICENSE)** (EUPL-1.2) — primary
+- **[GNU Affero General Public License v3.0](LICENSE-AGPL-3.0)** (AGPL-3.0) — alternative
+
+at your option. Both are strong copyleft licences with a network-use clause:
+running a modified version as a hosted service obliges you to make the source
+of your modifications available to the users of that service. This is
+deliberate — bb-mcp-server is a security tool, and we don't want forks
+re-emerging as closed-source SaaS.
+
+EUPL-1.2 is the primary licence (EU-drafted, multilingual, with an explicit
+compatibility list covering AGPL-3.0, GPL-2.0/3.0, MPL-2.0, OSL, and others —
+see Appendix of the EUPL). AGPL-3.0 is offered for projects or jurisdictions
+where it is more familiar.
 
 ---
 

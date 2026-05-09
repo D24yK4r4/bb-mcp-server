@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0
 """Web testing tool wrappers — curl, ffuf, feroxbuster, whatweb, katana."""
 
 from config import BB_ROOT

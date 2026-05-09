@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0
 """
 Per-host 429 circuit breaker + global rate ceiling.
 

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Relicensed from MIT to EUPL-1.2 OR AGPL-3.0** (dual-license, recipient
+  picks). Both are strong copyleft with a network-use clause: running a
+  modified version as a hosted service obliges the operator to make the
+  source of those modifications available to its users. This is deliberate
+  — bb-mcp-server is a security tool, and the project does not want forks
+  re-emerging as closed-source SaaS. Versions 0.2.0 and earlier remain
+  available under MIT for anyone who downloaded them under those terms;
+  the relicense applies to all future commits and releases.
+- Added `LICENSE-AGPL-3.0` (canonical GNU text); replaced `LICENSE` with
+  the canonical EUPL-1.2 text from the European Commission.
+- Added `# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0` headers to all
+  Python source files in `server/`.
+- Updated `README.md`, `CONTRIBUTING.md`, and `SECURITY.md` to reflect the
+  new licence terms.
+
 ## [0.2.0] - 2026-05-07
 
 Hardening release. Three layers added on top of v0.1.0: a global outbound

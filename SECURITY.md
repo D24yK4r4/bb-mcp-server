@@ -38,7 +38,9 @@ Bugcrowd, HackerOne, etc.) — not here.
   reporters.
 - We do not provide indemnification for users of the project.
 
-The MIT license disclaims all warranties (see [`LICENSE`](LICENSE)).
+Both licences under which bb-mcp-server is distributed
+([EUPL-1.2](LICENSE) and [AGPL-3.0](LICENSE-AGPL-3.0)) disclaim all
+warranties — see Articles 7–8 of the EUPL and Sections 15–17 of the AGPL.
 
 ## Supported versions
 

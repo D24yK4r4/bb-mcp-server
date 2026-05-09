@@ -74,5 +74,8 @@ characters; include a short body explaining *why* if non-obvious.
 
 ## License
 
-By contributing you agree to license your contribution under the MIT
-license that covers the rest of the repo (see [`LICENSE`](LICENSE)).
+By contributing you agree to license your contribution under the same
+terms as the rest of the repo: dual-licensed under
+[EUPL-1.2](LICENSE) or [AGPL-3.0](LICENSE-AGPL-3.0) at the recipient's
+option. Both are strong copyleft with a network-use clause — please make
+sure you understand them before contributing.

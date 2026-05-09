@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0
 """
 Scope gate — every network command must pass this check
 before execution. Reads brief.md for each program.

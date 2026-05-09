@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0
 """
 Script analyzer — scans a script's source code before the approval
 request is shown to the operator. Produces a risk score and verdict.

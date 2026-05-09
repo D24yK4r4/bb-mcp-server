@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0
 """
 Central configuration for the Bug Bounty MCP Server.
 All allowlists, paths, limits, and patterns live here.

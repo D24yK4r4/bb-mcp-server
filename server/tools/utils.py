@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0
 """Safe file utilities — grep, filtered reads, note saving."""
 
 import os
