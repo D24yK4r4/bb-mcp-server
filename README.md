@@ -152,6 +152,9 @@ bb-mcp-server/
 ├── ARCHITECTURE.md            ← full design + data flow + security layers
 ├── LICENSE                    ← EUPL-1.2 (primary)
 ├── LICENSE-AGPL-3.0           ← AGPL-3.0 (alternative, at your option)
+├── COMMERCIAL.md              ← commercial-licence option for orgs that can't use copyleft
+├── TRADEMARK.md               ← name / wordmark policy (separate from code licence)
+├── DCO.md                     ← Developer Certificate of Origin (contribution sign-off)
 │
 ├── server/                    ← the MCP server (Python)
 │   ├── server.py              ← FastMCP entry point + tool registration
@@ -286,6 +289,27 @@ Anyone who obtained those versions retains the MIT licence on those
 copies indefinitely — the relicence applies only to commits and
 releases dated 2026-05-09 or later. You don't need to re-licence or
 re-download anything you already had.
+
+### Commercial licensing
+
+If your organisation cannot use AGPL or copyleft network-use clauses
+for legal or policy reasons, a **commercial licence** is available.
+Same code, same release stream, proprietary terms in place of
+EUPL-1.2 / AGPL-3.0. See [`COMMERCIAL.md`](COMMERCIAL.md) for details
+and contact information.
+
+### Trademark
+
+The name "bb-mcp-server" is a trademark of the project author. Forks
+and derivatives must rename — see [`TRADEMARK.md`](TRADEMARK.md). The
+licences cover the code; the trademark policy covers the name.
+
+### Contributing
+
+All contributions require a `Signed-off-by:` trailer
+([Developer Certificate of Origin](DCO.md)). See
+[`CONTRIBUTING.md`](CONTRIBUTING.md) for the full process and the
+DCO sign-off rules.
 
 ---
 

@@ -1,0 +1,46 @@
+name: DCO
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  dco-check:
+    name: Verify DCO sign-offs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check every commit has Signed-off-by
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          missing=""
+          for sha in $(git rev-list "${BASE_SHA}..${HEAD_SHA}"); do
+            author_email=$(git log -1 --pretty='%ae' "$sha")
+            commit_msg=$(git log -1 --pretty='%B' "$sha")
+            if ! printf '%s\n' "$commit_msg" | grep -qE "^Signed-off-by: .+ <.+@.+>$"; then
+              missing="${missing}${sha}: missing Signed-off-by%0A"
+              continue
+            fi
+            if ! printf '%s\n' "$commit_msg" | grep -qE "^Signed-off-by: .+ <${author_email}>$"; then
+              missing="${missing}${sha}: Signed-off-by email does not match author (${author_email})%0A"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::DCO check failed:%0A${missing}"
+            echo ""
+            echo "All commits must include a Signed-off-by trailer matching the commit author."
+            echo "See DCO.md for the full Developer Certificate of Origin text."
+            echo ""
+            echo "Fix: rebase and add sign-offs:"
+            echo "  git rebase -i HEAD~N --signoff"
+            echo "Or sign individual commits:"
+            echo "  git commit --amend --signoff"
+            exit 1
+          fi
+          echo "All commits are signed off."

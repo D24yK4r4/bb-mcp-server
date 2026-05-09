@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`DCO.md`** — Developer Certificate of Origin v1.1 (Linux Foundation).
+  Every contribution from now on requires a `Signed-off-by:` trailer
+  matching the commit author.
+- **`.github/workflows/dco.yml`** — CI check that blocks PRs whose
+  commits are missing or have mismatched `Signed-off-by:` trailers.
+- **`COMMERCIAL.md`** — commercial-licence option for organisations
+  that cannot use AGPL / copyleft network-use clauses. Same code,
+  proprietary terms, contact for a quote.
+- **`TRADEMARK.md`** — explicit name / wordmark policy. Forks and
+  derivatives must rename; the licences cover the code, not the name.
+
 ### Changed
 - **Relicensed from MIT to EUPL-1.2 OR AGPL-3.0** (dual-license, recipient
   picks). Both are strong copyleft with a network-use clause: running a
@@ -16,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   re-emerging as closed-source SaaS. Versions 0.2.0 and earlier remain
   available under MIT for anyone who downloaded them under those terms;
   the relicense applies to all future commits and releases.
+- **`CONTRIBUTING.md`** — added DCO sign-off section + commercial-licensing
+  note (contributors accept that their DCO-signed contributions can be
+  included in commercial dual-licensing).
+- **`README.md`** — added "Why this licence" rationale, commercial
+  licensing summary, trademark summary, and contributing pointer.
 - Added `LICENSE-AGPL-3.0` (canonical GNU text); replaced `LICENSE` with
   the canonical EUPL-1.2 text from the European Commission.
 - Added `# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0` headers to all
