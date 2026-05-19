@@ -203,6 +203,8 @@ def _save_full(output: str, program: str, source: str) -> str:
         try:
             os.chmod(path, 0o600)
         except OSError:
+            # Best-effort hardening: some filesystems (FAT, network mounts) don't
+            # honour POSIX modes. Don't fail the sanitize flow if chmod can't apply.
             pass
         rel = path.relative_to(BB_ROOT)
         return str(rel)

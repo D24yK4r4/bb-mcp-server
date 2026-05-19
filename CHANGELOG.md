@@ -108,6 +108,11 @@ EUPL-1.2 OR AGPL-3.0, DCO, commercial-licensing option, trademark policy).
   the parse failure while preserving the genesis-hash fallback. Added a
   module-level `logger = logging.getLogger(__name__)`. (CodeQL
   `py/empty-except`.)
+- **`server/core/sanitizer.py`** — annotated the empty `except OSError`
+  in `_save_full` (around the `os.chmod(path, 0o600)` best-effort
+  hardening) with an explanatory comment. Behaviour unchanged: chmod
+  remains best-effort so the sanitize flow stays non-fatal on
+  filesystems that don't honour POSIX modes. (CodeQL `py/empty-except`.)
 - **`server/core/circuit_breaker.py`** — removed an unused
   `import os as _os` from the aggregate rate tracker section. (CodeQL
   `py/unused-import`.)
