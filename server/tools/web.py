@@ -1,10 +1,24 @@
-# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0
 """Web testing tool wrappers — curl, ffuf, feroxbuster, whatweb, katana."""
+
+import re
 
 from config import BB_ROOT
 from core.executor import run
 from core.sanitizer import sanitize
+from core import circuit_breaker as cb
 from audit import logger as audit
+from vault.safe import resolve_args
+
+_SAFE_TOKEN_RE = re.compile(r'<SAFE:(?:[^:>]+:)?[0-9a-f]{8}>')
+
+
+def _resolve_safe(values: list[str], program: str) -> tuple[list[str], int]:
+    """Substitute <SAFE:id> tokens with vault values. Returns (resolved, count_of_tokens_seen)."""
+    if not values:
+        return [], 0
+    seen = sum(len(_SAFE_TOKEN_RE.findall(v)) for v in values)
+    resolved = resolve_args(list(values), program)
+    return resolved, seen
 
 
 def _out(program: str, filename: str) -> str:
@@ -27,25 +41,65 @@ def curl(
     data:    POST body (string)
     flags:   extra curl flags (from allowlist only)
     """
+    target_host = _extract_host(url)
+
+    # Guard 1: 429 circuit breaker (cooldown after a previous 429)
+    tripped, remaining = cb.is_tripped(target_host)
+    if tripped:
+        audit.log(program, 'circuit_breaker_blocked', {
+            'tool': 'curl', 'url': url, 'host': target_host,
+            'cooldown_remaining_sec': remaining,
+        })
+        return (f"⛔ CIRCUIT BREAKER OPEN — host '{target_host}' (or its zone) returned 429 "
+                f"recently. Refusing to fire to avoid IP ban. Cooldown remaining: "
+                f"{remaining} seconds. To override (only if you're certain), call "
+                f"core.circuit_breaker.reset() — operator-only.")
+
+    # Guard 2: aggregate rate cap across ALL bb-hunter tools to this zone
+    would_exceed, current_rate = cb.aggregate_rate_check(target_host, expected_request_count=1)
+    if would_exceed:
+        audit.log(program, 'aggregate_rate_blocked', {
+            'tool': 'curl', 'host': target_host, 'current_rate': current_rate,
+        })
+        return (f"⛔ AGGREGATE RATE CAP — zone '{cb._zone(target_host)}' is currently at "
+                f"{current_rate:.1f} req/s across all bb-hunter tools. Cap is "
+                f"{cb.SAFE_RATE_PER_ZONE} req/s. Refusing to add another request. "
+                f"Wait ~1s and retry, or pause other running scans.")
+    cb.record_request(target_host, expected_request_count=1)
+
     args = ['-si', '--max-time', '15']
 
     if method.upper() != 'GET':
         args += ['-X', method.upper()]
 
-    for h in (headers or []):
+    resolved_headers, hdr_tokens = _resolve_safe(headers or [], program)
+    resolved_data, data_tokens = _resolve_safe([data] if data else [], program)
+
+    for h in resolved_headers:
         args += ['-H', h]
 
-    if data:
-        args += ['-d', data]
+    if resolved_data:
+        args += ['-d', resolved_data[0]]
 
     for f in (flags or []):
         args.append(f)
 
     args.append(url)
 
-    raw, code = run('curl', args, program=program, target=_extract_host(url))
+    raw, code = run('curl', args, program=program, target=target_host)
+
+    # Trip the breaker if response shows throttle signals
+    throttled = cb.detect_throttle_in_response(raw)
+    if throttled:
+        cb.trip(target_host, reason='429/503/Retry-After detected')
+        audit.log(program, 'circuit_breaker_tripped', {
+            'tool': 'curl', 'url': url, 'host': target_host,
+        })
+
     audit.log(program, 'tool_run', {
-        'tool': 'curl', 'url': url, 'method': method, 'returncode': code
+        'tool': 'curl', 'url': url, 'method': method, 'returncode': code,
+        'safe_tokens_resolved': hdr_tokens + data_tokens,
+        'throttled': throttled,
     })
     return sanitize(raw, program, f'curl {method} {url}')
 
@@ -74,7 +128,8 @@ def ffuf(
     ]
     if extensions:
         args += ['-e', extensions]
-    for h in (headers or []):
+    resolved_headers, hdr_tokens = _resolve_safe(headers or [], program)
+    for h in resolved_headers:
         args += ['-H', h]
 
     raw, code = run('ffuf', args, program=program, target=_extract_host(url))
@@ -83,7 +138,8 @@ def ffuf(
     if len(lines) > 30:
         result += f'\n[... {len(lines)-30} more — see recon/ffuf.json]'
     audit.log(program, 'tool_run', {
-        'tool': 'ffuf', 'url': url, 'wordlist': wordlist, 'returncode': code
+        'tool': 'ffuf', 'url': url, 'wordlist': wordlist, 'returncode': code,
+        'safe_tokens_resolved': hdr_tokens,
     })
     return sanitize(result, program, f'ffuf -u {url}')
 
@@ -108,7 +164,8 @@ def feroxbuster(
         '--depth', str(depth),
         '--rate-limit', str(TOOL_RATE_LIMIT),
     ]
-    for h in (headers or []):
+    resolved_headers, hdr_tokens = _resolve_safe(headers or [], program)
+    for h in resolved_headers:
         args += ['-H', h]
 
     raw, code = run('feroxbuster', args, program=program,
@@ -118,7 +175,8 @@ def feroxbuster(
     if len(lines) > 30:
         result += f'\n[... {len(lines)-30} more — see recon/ferox.txt]'
     audit.log(program, 'tool_run', {
-        'tool': 'feroxbuster', 'url': url, 'returncode': code
+        'tool': 'feroxbuster', 'url': url, 'returncode': code,
+        'safe_tokens_resolved': hdr_tokens,
     })
     return sanitize(result, program, f'feroxbuster -u {url}')
 
@@ -133,7 +191,8 @@ def katana(
     out_file = _out(program, 'katana.txt')
     args = ['-u', url, '-d', str(depth), '-o', out_file, '-silent',
             '-rate-limit', str(TOOL_RATE_LIMIT)]
-    for h in (headers or []):
+    resolved_headers, hdr_tokens = _resolve_safe(headers or [], program)
+    for h in resolved_headers:
         args += ['-H', h]
 
     raw, code = run('katana', args, program=program,
@@ -141,7 +200,8 @@ def katana(
     lines = [l for l in raw.splitlines() if l.strip()]
     result = f'katana: {len(lines)} URLs crawled → saved to recon/katana.txt'
     audit.log(program, 'tool_run', {
-        'tool': 'katana', 'url': url, 'returncode': code
+        'tool': 'katana', 'url': url, 'returncode': code,
+        'safe_tokens_resolved': hdr_tokens,
     })
     return sanitize(result, program, f'katana -u {url}')
 

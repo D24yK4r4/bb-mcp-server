@@ -1,4 +1,3 @@
-# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0
 """
 Stage 1 — Unit Tests
 Tests every core component with no network calls.
@@ -98,6 +97,37 @@ check('JSON id value preserved (not a secret)',
       '"id": 1337' in sanitized)
 
 info(f'Sanitized output preview:\n{sanitized[:300]}')
+
+# Truncation + full-output save behavior (regression: prior code claimed to save
+# but didn't; large recon outputs were silently dropped)
+big = '\n'.join(f'line {i:04d}: padding-padding-padding' for i in range(500))
+truncated = sanitizer_mod.sanitize(big, PROGRAM, 'curl https://big-asset.test/app.js')
+
+check('Long output is truncated',
+      'lines truncated' in truncated or 'output truncated' in truncated)
+
+# Find the saved file path embedded in the notice
+import re as _re
+m = _re.search(r'saved to (programs/[^\s\]]+)', truncated)
+check('Truncation notice references a real saved path',
+      m is not None,
+      f'Got: {truncated[-200:]}')
+
+if m:
+    saved_path = BB_ROOT_for_test = Path(config.BB_ROOT) / m.group(1) if hasattr(config, 'BB_ROOT') else None
+    # config.BB_ROOT is the real BB_ROOT (sanitizer uses it directly)
+    from config import BB_ROOT as _bb
+    saved_path = _bb / m.group(1)
+    check(f'Saved recon file exists at {m.group(1)}', saved_path.exists())
+    if saved_path.exists():
+        content = saved_path.read_text()
+        check('Saved file contains full pre-truncation content (last line present)',
+              'line 0499' in content)
+        check('Saved file permissions are 600',
+              oct(saved_path.stat().st_mode)[-3:] == '600',
+              f'Got: {oct(saved_path.stat().st_mode)[-3:]}')
+        # Cleanup
+        saved_path.unlink()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TEST 2 — VAULT
@@ -212,6 +242,31 @@ check('othercorp.com is OUT of scope (not in scope list)', not allowed, reason)
 
 allowed, reason = scope_check('https://api.testcorp.com/v1/users', PROGRAM)
 check('Full URL with path is handled correctly (in scope)', allowed, reason)
+
+# Carve-out shape: explicit in-scope subdomain + wildcard OOS catch-all.
+# Specific in-scope match must win over the wildcard OOS — this is how
+# platforms typically resolve carve-outs.
+CARVEOUT_PROG = 'test_program_carveout_shape'
+
+allowed, reason = scope_check('auth.acme.example', CARVEOUT_PROG)
+check('Carve-out: explicit in-scope subdomain wins over *.acme.example OOS (auth)',
+      allowed, reason)
+
+allowed, reason = scope_check('library.acme.example', CARVEOUT_PROG)
+check('Carve-out: explicit in-scope subdomain wins over *.acme.example OOS (library)',
+      allowed, reason)
+
+allowed, reason = scope_check('https://app.acme.example/login?return_to=x', CARVEOUT_PROG)
+check('Carve-out: explicit in-scope still wins with full URL + querystring',
+      allowed, reason)
+
+allowed, reason = scope_check('marketing.acme.example', CARVEOUT_PROG)
+check('Carve-out: unlisted subdomain is OOS via wildcard (marketing.acme.example)',
+      not allowed, reason)
+
+allowed, reason = scope_check('anything.widgetcorp.example', CARVEOUT_PROG)
+check('Carve-out: unrelated wildcard OOS still denies (widgetcorp)',
+      not allowed, reason)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TEST 5 — SCRIPT ANALYZER

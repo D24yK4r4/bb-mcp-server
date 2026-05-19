@@ -1,4 +1,3 @@
-# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0
 """
 Bug Bounty MCP Server — main entry point.
 
@@ -16,8 +15,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 from mcp.server.fastmcp import FastMCP
 
 from tools import recon, web, vuln, utils
-from core import approver
+from core import approver, verdicts
 from core.scope import check as scope_check
+from core.validator_brief import build_brief as build_validator_brief
 from vault.safe import describe as vault_describe
 from audit.logger import verify as audit_verify
 from reports.generator import generate as generate_report
@@ -25,17 +25,37 @@ from reports.generator import generate as generate_report
 mcp = FastMCP(
     name='bb-hunter',
     instructions=(
-        'Bug bounty hunting co-pilot — IMPACT-ONLY mission.\n'
-        'Hunt for High, Critical, or Exceptional severity findings. Low/Medium '
-        'are a waste of time unless they chain into a critical impact — always '
-        'ask "can this chain to critical?" before investing time.\n'
+        'Bug bounty hunting co-pilot — IMPACT-FIRST mission.\n'
+        'Hunt for High, Critical, or Exceptional severity findings. Mediums '
+        'ship only as "free Mediums" — byproduct of in-lane hunting, <30min '
+        'draft, exploitable class, validator-gate passed. Lows are dropped. '
+        'Always ask "can this chain to critical?" before investing time.\n'
         'A finding without a working safe PoC is a hypothesis, not a bug. '
         'Demonstrate impact with reproducible non-destructive exploitation '
         '(alert(document.domain), \' OR 1=1, SLEEP, IMDS read, id/whoami, own '
         'test accounts). If you cannot exploit it within program rules, it is '
         'not a finding — keep digging or pivot.\n'
-        'create_report rejects severity below High AND empty PoC fields, '
-        'unless force=True is set.\n'
+        'create_report rejects severity below Medium AND empty PoC fields, '
+        'unless force=True is set. Noise-class Mediums (missing headers, '
+        'clickjacking, self-XSS, rate-limit, SPF/DMARC, cookie flags) must '
+        'still be dropped at operator level — the gate enforces the numeric '
+        'floor only, not taxonomy.\n'
+        'VALIDATOR GATE (mandatory, server-enforced). Before drafting any '
+        'report:\n'
+        '  1. call validate_finding(program, hypothesis, target, evidence, '
+        'proposed_poc) — server returns verdict_id + brief.\n'
+        '  2. spawn an Opus Agent (subagent_type=general-purpose, model=opus) '
+        'with that brief as the prompt.\n'
+        '  3. read the agent verdict (line 1 = "EXPLOITABLE: …" or '
+        '"THEORETICAL — DROP: …").\n'
+        '  4. call record_verdict(verdict_id, verdict, reasoning, '
+        'validated_poc).\n'
+        '  5. if EXPLOITABLE → run the safe PoC, then '
+        'create_report(..., validator_verdict_id=verdict_id).\n'
+        '  6. if THEORETICAL → archive in notes.md, drop the lead, pivot. '
+        'Do not draft a report.\n'
+        'create_report rejects any report without an EXPLOITABLE verdict_id; '
+        'force=True does NOT bypass this gate.\n'
         'Default rate limit on automated tools is 5 req/sec (programs typically '
         'allow 5–10/sec) — stay polite, do not bypass.\n'
         'All sensitive values are vaulted locally — you receive <SAFE:id> tokens. '
@@ -64,7 +84,7 @@ mcp = FastMCP(
 
 @mcp.tool()
 def run_subfinder(domain: str, program: str) -> str:
-    """Passive subdomain enumeration. Results saved to recon/subfinder.txt."""
+    """Passive subdomain enumeration. Results saved to recon/subfinder_<domain>.txt."""
     return recon.subfinder(domain, program)
 
 
@@ -166,9 +186,10 @@ def run_nuclei(
     program: str,
     templates: list[str] | None = None,
     severity: str = 'medium,high,critical',
+    headers: list[str] | None = None,
 ) -> str:
     """Vulnerability scanning with nuclei. Detection only — no exploitation."""
-    return vuln.nuclei(target, program, templates, severity)
+    return vuln.nuclei(target, program, templates, severity, headers)
 
 
 @mcp.tool()
@@ -327,6 +348,104 @@ def vault_lookup(safe_id: str, program: str) -> str:
     return vault_describe(program, safe_id)
 
 
+# ── Validator gate ────────────────────────────────────────────────────────────
+
+@mcp.tool()
+def validate_finding(
+    program: str,
+    hypothesis: str,
+    target: str,
+    evidence: str,
+    proposed_poc: str,
+) -> str:
+    """
+    Open a verdict for a finding hypothesis. Returns verdict_id + a markdown
+    brief that the operator must hand to an Opus Agent to obtain the verdict.
+
+    Server-side gates run BEFORE the verdict is opened:
+      • scope_check(target, program) — out-of-scope targets are rejected.
+      • verdicts.safety_check(proposed_poc) — destructive payloads are rejected.
+
+    After the Opus Agent returns its verdict, the operator must call
+    record_verdict(verdict_id, ...) to finalize. create_report later requires
+    a finalized EXPLOITABLE verdict_id from the same program.
+    """
+    # Scope gate
+    in_scope, scope_reason = scope_check(target, program)
+    if not in_scope:
+        return f'🚫 ERROR: target "{target}" is out of scope ({scope_reason}).'
+
+    # Payload-safety gate
+    safe, safety_reason = verdicts.safety_check(proposed_poc)
+    if not safe:
+        return f'🚫 ERROR: {safety_reason}'
+
+    # Open the verdict
+    verdict_id = verdicts.create(
+        program=program,
+        hypothesis=hypothesis,
+        target=target,
+        evidence=evidence,
+        proposed_poc=proposed_poc,
+    )
+
+    brief = build_validator_brief(
+        program=program,
+        hypothesis=hypothesis,
+        target=target,
+        evidence=evidence,
+        proposed_poc=proposed_poc,
+        verdict_id=verdict_id,
+    )
+
+    return (
+        f'✅ Verdict opened.\n\n'
+        f'verdict_id: {verdict_id}\n'
+        f'status: {verdicts.VERDICT_AWAITING}\n\n'
+        f'Next steps for the operator:\n'
+        f'  1. Spawn an Opus Agent (subagent_type=general-purpose, model=opus) '
+        f'with the brief below as the prompt.\n'
+        f'  2. Read the agent\'s verdict (line 1).\n'
+        f'  3. Call record_verdict(verdict_id={verdict_id!r}, verdict=..., '
+        f'reasoning=..., validated_poc=...).\n\n'
+        f'━━━━━━━━ BRIEF (paste this to the Opus Agent) ━━━━━━━━\n'
+        f'{brief}'
+    )
+
+
+@mcp.tool()
+def record_verdict(
+    verdict_id: str,
+    verdict: str,
+    reasoning: str,
+    validated_poc: str = '',
+) -> str:
+    """
+    Record the Opus validator agent's outcome.
+
+    verdict must be exactly 'EXPLOITABLE' or 'THEORETICAL'.
+    A verdict can only be recorded once.
+
+    After EXPLOITABLE, the operator can run the validated PoC and call
+    create_report with this verdict_id. After THEORETICAL, the operator must
+    archive the lead in notes.md and pivot.
+    """
+    ok, msg = verdicts.record(
+        verdict_id=verdict_id,
+        verdict=verdict.strip().upper(),
+        reasoning=reasoning,
+        validated_poc=validated_poc,
+    )
+    return ('✅ ' if ok else '🚫 ERROR: ') + msg
+
+
+@mcp.tool()
+def verify_verdicts_log(program: str) -> str:
+    """Verify the integrity of the verdicts log hash chain for one program."""
+    ok, msg = verdicts.verify(program)
+    return ('✅ ' if ok else '🚫 ') + msg
+
+
 # ── Report tools ───────────────────────────────────────────────────────────────
 
 @mcp.tool()
@@ -351,6 +470,7 @@ def create_report(
     impact: str,
     remediation: str,
     references: list[str],
+    validator_verdict_id: str,
     force: bool = False,
 ) -> str:
     """
@@ -359,17 +479,43 @@ def create_report(
     Full report      → ~/.hive/<program>/findings/<id>/report_full.md (local only)
     Returns paths to both files.
 
-    Severity gate: rejects findings below High severity unless force=True.
+    Validator gate: rejects findings without an EXPLOITABLE verdict_id from
+      validate_finding/record_verdict for THIS program. force=True does NOT
+      bypass this gate.
+    Severity gate: rejects findings below Medium severity unless force=True.
+      Mediums must be "free" (in-lane byproduct, <30min draft, exploitable
+      class). Lows are always rejected unless force=True is set.
     PoC gate: rejects findings without reproduction artifacts unless force=True.
-    Bug bounty mission is high-impact only AND demonstrated — set force=True
-    only if the operator has explicitly decided to submit anyway.
     """
+    # ── Validator gate (unconditional — force=True does not bypass) ──────────
+    v = verdicts.get(validator_verdict_id)
+    if v is None:
+        return (
+            f'🚫 ERROR: validator_verdict_id {validator_verdict_id!r} not found. '
+            f'Call validate_finding first, then record_verdict, then pass the '
+            f'verdict_id here.'
+        )
+    if v.get('program') != program:
+        return (
+            f'🚫 ERROR: verdict {validator_verdict_id!r} belongs to program '
+            f'{v.get("program")!r}, not {program!r}. Verdicts are not '
+            f'cross-program reusable.'
+        )
+    if v.get('status') != verdicts.VERDICT_EXPLOITABLE:
+        return (
+            f'🚫 ERROR: verdict {validator_verdict_id!r} status is '
+            f'{v.get("status")!r}; create_report requires '
+            f'{verdicts.VERDICT_EXPLOITABLE!r}. '
+            f'If THEORETICAL, archive the lead in notes.md and pivot — '
+            f'do not draft a report.'
+        )
+
     from config import MIN_REPORT_SEVERITY
     sev_norm = severity.strip().lower()
     if sev_norm not in MIN_REPORT_SEVERITY and not force:
         return (
-            f'ERROR: severity "{severity}" rejected — bug bounty mission is '
-            f'impact-only (High/Critical/Exceptional). '
+            f'ERROR: severity "{severity}" rejected — mission floor is '
+            f'Medium/High/Critical/Exceptional. Lows are dropped, not reported. '
             f'If you really want to submit this anyway, re-call with force=True '
             f'after confirming with the operator.'
         )

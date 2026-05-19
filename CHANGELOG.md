@@ -7,7 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-19
+
+Validator-gate release. The biggest change: a server-enforced two-agent
+workflow that catches over-stretched hypotheses *before* a report is drafted.
+Reporting is no longer a single tool call — it's a four-step pipeline
+(`validate_finding` → spawn validator agent → `record_verdict` → `create_report`),
+and `create_report` will refuse any submission whose `validator_verdict_id`
+does not resolve to an `EXPLOITABLE` verdict in the local verdicts log. The
+gate is unconditional; `force=True` does not bypass it.
+
+Three new tools, two new core modules, two new test suites, plus the
+licensing work that landed after v0.2.0 was tagged (relicense to
+EUPL-1.2 OR AGPL-3.0, DCO, commercial-licensing option, trademark policy).
+
 ### Added
+- **Validator-agent gate — three new MCP tools** (server.py now exposes 30
+  tools, up from 27 in v0.2.0):
+  - **`validate_finding(program, hypothesis, target, evidence, proposed_poc)`**
+    — re-runs scope check on the target, screens the proposed PoC against
+    the forbidden-payload denylist, opens a verdict in `AWAITING` state,
+    and returns a `verdict_id` plus a markdown brief. The brief is what
+    you feed to a separately-spawned validator agent for an independent
+    EXPLOITABLE / THEORETICAL judgment. Hash-chained to the verdicts log.
+  - **`record_verdict(verdict_id, verdict, reasoning, validated_poc)`** —
+    closes the verdict with the agent's judgment (`EXPLOITABLE` or
+    `THEORETICAL`) and its safe PoC. Hash-chained.
+  - **`verify_verdicts_log(program)`** — replays the hash chain on the
+    per-program verdicts ledger and reports any tampering. Mirrors the
+    audit-log verifier added in v0.1.0.
+- **`server/core/verdicts.py`** — verdicts ledger: append-only JSON-Lines,
+  SHA-256 hash chain, `AWAITING → EXPLOITABLE | THEORETICAL` state machine,
+  resolution helpers used by `create_report` to enforce the gate.
+- **`server/core/validator_brief.py`** — generates the markdown brief the
+  validator agent receives. The brief embeds the burden-of-proof clause
+  (payload-variant exhaustion + bypass-technique exhaustion + endpoint/
+  auth-state exhaustion) so an under-justified THEORETICAL verdict gets
+  caught and re-spawned rather than killing a real lead.
+- **`server/test_validator_gate.py`** — 196 lines covering the gate
+  end-to-end: AWAITING enforcement, EXPLOITABLE-only acceptance,
+  THEORETICAL rejection, force-bypass refusal, verdict-id resolution
+  failures.
+- **`server/test_verdicts.py`** — 185 lines covering the verdicts module
+  directly: state transitions, hash-chain continuity, tamper detection,
+  per-program isolation.
+
+### Changed
+- **`create_report` requires `validator_verdict_id`** — the parameter is
+  now mandatory for any submission. The tool resolves it against the
+  per-program verdicts log; only `EXPLOITABLE` verdicts pass. Missing,
+  unknown, mismatched-program, AWAITING-state, or THEORETICAL verdict
+  IDs all refuse, with a clear error pointing to the validator workflow.
+  `force=True` continues to bypass the severity floor (Medium+) but
+  **does not** bypass the validator gate.
+- **`server/launch.sh`** — firejail whitelist extended to include
+  `~/go/bin` (read-only) so ProjectDiscovery binaries (`httpx`, `nuclei`,
+  `katana`, `subfinder`) installed via `go install` remain executable
+  inside the sandbox. Existing installs continue to work; this only
+  matters if your binaries live under `~/go/bin` rather than
+  `/usr/local/bin`.
+- **Validator brief routing in the autoloader hook** — when
+  `validate_finding` fires, the hook surfaces the validator-agent
+  spawn instructions alongside the brief text, so the operator sees
+  the full four-step protocol inline.
+
+### Licensing & governance (carried over from post-v0.2.0 work)
+- **Relicensed from MIT to EUPL-1.2 OR AGPL-3.0** (dual-license, recipient
+  picks). Both are strong copyleft with a network-use clause: running a
+  modified version as a hosted service obliges the operator to make the
+  source of those modifications available to its users. This is deliberate
+  — bb-mcp-server is a security tool, and the project does not want forks
+  re-emerging as closed-source SaaS. Versions 0.2.0 and earlier remain
+  available under MIT for anyone who downloaded them under those terms;
+  the relicense applies to all future commits and releases.
 - **`DCO.md`** — Developer Certificate of Origin v1.1 (Linux Foundation).
   Every contribution from now on requires a `Signed-off-by:` trailer
   matching the commit author.
@@ -18,16 +90,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   proprietary terms, contact for a quote.
 - **`TRADEMARK.md`** — explicit name / wordmark policy. Forks and
   derivatives must rename; the licences cover the code, not the name.
-
-### Changed
-- **Relicensed from MIT to EUPL-1.2 OR AGPL-3.0** (dual-license, recipient
-  picks). Both are strong copyleft with a network-use clause: running a
-  modified version as a hosted service obliges the operator to make the
-  source of those modifications available to its users. This is deliberate
-  — bb-mcp-server is a security tool, and the project does not want forks
-  re-emerging as closed-source SaaS. Versions 0.2.0 and earlier remain
-  available under MIT for anyone who downloaded them under those terms;
-  the relicense applies to all future commits and releases.
 - **`CONTRIBUTING.md`** — added DCO sign-off section + commercial-licensing
   note (contributors accept that their DCO-signed contributions can be
   included in commercial dual-licensing).
@@ -39,6 +101,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Python source files in `server/`.
 - Updated `README.md`, `CONTRIBUTING.md`, and `SECURITY.md` to reflect the
   new licence terms.
+
+### Compatibility
+- **`create_report` callers must update.** Code that previously called
+  `create_report(...)` without a `validator_verdict_id` will now fail
+  with a structured error. The full four-step flow is the only supported
+  path. There is no migration shim — the gate exists precisely to prevent
+  unverified submissions.
+- All existing v0.2.0 tools continue to work unchanged. The validator
+  gate is additive: it sits in front of `create_report` and does not
+  affect the recon / web / vuln tool surface.
+- Sanitizer, vault, audit log, scope gate, circuit breaker, rate caps,
+  and firejail wrapper are unchanged from v0.2.0.
 
 ## [0.2.0] - 2026-05-07
 
@@ -198,6 +272,7 @@ Initial public release.
   PII names, DB connection-string passwords). Discovered and fixed
   pre-publication.
 
-[Unreleased]: https://github.com/D24yK4r4/bb-mcp-server/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/D24yK4r4/bb-mcp-server/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/D24yK4r4/bb-mcp-server/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/D24yK4r4/bb-mcp-server/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/D24yK4r4/bb-mcp-server/releases/tag/v0.1.0

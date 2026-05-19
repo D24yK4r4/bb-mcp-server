@@ -1,4 +1,3 @@
-# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0
 """Passive and active recon tool wrappers."""
 
 from pathlib import Path
@@ -14,37 +13,46 @@ def _out(program: str, filename: str) -> str:
     return str(p / filename)
 
 
+def _safe_domain(domain: str) -> str:
+    # Filename-safe slug for per-domain output files (prevents clobber when
+    # the same tool runs on multiple domains in one program).
+    return domain.replace('*', 'wildcard').replace('/', '_').replace(':', '_')
+
+
 def subfinder(domain: str, program: str) -> str:
-    out_file = _out(program, 'subfinder.txt')
+    fname = f'subfinder_{_safe_domain(domain)}.txt'
+    out_file = _out(program, fname)
     raw, code = run('subfinder', ['-d', domain, '-silent', '-o', out_file],
                     program=program, target=domain)
     # Summary only to Claude
     lines = [l for l in raw.splitlines() if l.strip()]
-    summary = f'subfinder: {len(lines)} subdomains found → saved to recon/subfinder.txt'
+    summary = f'subfinder: {len(lines)} subdomains found → saved to recon/{fname}'
     audit.log(program, 'tool_run', {'tool': 'subfinder', 'target': domain,
                                      'returncode': code, 'lines': len(lines)})
     return sanitize(summary, program, f'subfinder -d {domain}')
 
 
 def amass(domain: str, program: str) -> str:
-    out_file = _out(program, 'amass.txt')
+    fname = f'amass_{_safe_domain(domain)}.txt'
+    out_file = _out(program, fname)
     raw, code = run('amass', ['enum', '-passive', '-d', domain, '-o', out_file],
                     program=program, target=domain, timeout=300)
     lines = [l for l in raw.splitlines() if l.strip()]
-    summary = f'amass: {len(lines)} results → saved to recon/amass.txt'
+    summary = f'amass: {len(lines)} results → saved to recon/{fname}'
     audit.log(program, 'tool_run', {'tool': 'amass', 'target': domain,
                                      'returncode': code})
     return sanitize(summary, program, f'amass enum -passive -d {domain}')
 
 
 def assetfinder(domain: str, program: str) -> str:
-    out_file = _out(program, 'assetfinder.txt')
+    fname = f'assetfinder_{_safe_domain(domain)}.txt'
+    out_file = _out(program, fname)
     raw, code = run('assetfinder', ['--subs-only', domain],
                     program=program, target=domain)
     lines = [l for l in raw.splitlines() if l.strip()]
     # Write output manually since assetfinder uses stdout
     Path(out_file).write_text('\n'.join(lines), encoding='utf-8')
-    summary = f'assetfinder: {len(lines)} subdomains → saved to recon/assetfinder.txt'
+    summary = f'assetfinder: {len(lines)} subdomains → saved to recon/{fname}'
     audit.log(program, 'tool_run', {'tool': 'assetfinder', 'target': domain,
                                      'returncode': code})
     return sanitize(summary, program, f'assetfinder --subs-only {domain}')
@@ -53,11 +61,15 @@ def assetfinder(domain: str, program: str) -> str:
 def httpx(input_file: str, program: str) -> str:
     from config import TOOL_RATE_LIMIT
     out_file = _out(program, 'alive.txt')
+    # Per-host -timeout 5s prevents one slow host hanging the whole batch.
+    # -tech-detect removed — fingerprint via whatweb separately on alive hosts.
     raw, code = run('httpx',
                     ['-l', input_file, '-silent', '-status-code',
-                     '-title', '-tech-detect', '-rate-limit', str(TOOL_RATE_LIMIT),
+                     '-title', '-timeout', '5', '-disable-update-check',
+                     '-rate-limit', str(TOOL_RATE_LIMIT),
                      '-o', out_file],
-                    program=program)
+                    program=program,
+                    timeout=600)
     lines = [l for l in raw.splitlines() if l.strip()]
     # Return first 30 alive hosts — sanitized
     preview = '\n'.join(lines[:30])

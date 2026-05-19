@@ -1,12 +1,10 @@
-# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0
 """
 Safe subprocess executor.
 - shell=False always
 - Tool allowlist enforced
 - Argument validation (metacharacters, traversal, null bytes)
 - Clean environment (no inherited secrets)
-- Per-tool MCP-side cooldown (coarse — guards against runaway agent loops)
-- Global rate ceiling across ALL bb-hunter tools (hard cap on outbound rate)
+- Rate limiting per tool
 - Forbidden payload patterns blocked
 - Scope gate for network tools
 """
@@ -24,10 +22,11 @@ from config import (
     GLOBAL_RATE_LIMIT,
     RATE_LIMITS,
     SHELL_METACHARACTERS,
+    TOOL_PATH_OVERRIDES,
     WORK_DIR,
 )
-from core import circuit_breaker as cb
 from core import scope as scope_mod
+from core import circuit_breaker as cb
 
 # Track last execution time per tool for rate limiting
 _last_run: dict[str, float] = {}
@@ -69,10 +68,25 @@ def _validate_tool(tool: str) -> str:
             f'Tool "{tool}" is not on the allowlist. '
             f'Allowed: {sorted(ALLOWED_TOOLS)}'
         )
+    override = TOOL_PATH_OVERRIDES.get(tool)
+    if override:
+        if not Path(override).is_file() or not os.access(override, os.X_OK):
+            raise FileNotFoundError(
+                f'Tool "{tool}" override path "{override}" is not an executable file. '
+                f'Check TOOL_PATH_OVERRIDES in config.py.'
+            )
+        return override
     full_path = shutil.which(tool)
     if not full_path:
         raise FileNotFoundError(f'Tool "{tool}" not found in PATH.')
     return full_path
+
+
+def _redact_arg(arg: str, keep: int = 24) -> str:
+    """Render an arg for error messages without leaking long sensitive values."""
+    if len(arg) <= keep:
+        return repr(arg)
+    return f'{arg[:keep]!r}...({len(arg)} chars total, redacted)'
 
 
 def _validate_args(args: list[str]) -> None:
@@ -81,11 +95,11 @@ def _validate_args(args: list[str]) -> None:
         if '\x00' in arg:
             raise ValueError('Null byte detected in argument.')
         if '../' in arg or '..\\' in arg:
-            raise ValueError(f'Path traversal detected in argument: {arg!r}')
+            raise ValueError(f'Path traversal detected in argument: {_redact_arg(arg)}')
         for meta in SHELL_METACHARACTERS:
             if meta in arg:
                 raise ValueError(
-                    f'Shell metacharacter {meta!r} detected in argument: {arg!r}'
+                    f'Shell metacharacter {meta!r} detected in argument: {_redact_arg(arg)}'
                 )
 
     # Check entire command string for forbidden payload patterns
@@ -110,7 +124,7 @@ def _validate_path(path: str, mode: str = 'read') -> None:
 
 # Per-tool expected outbound request rate (req/sec) used for the global budget
 # reservation. Single-shot tools count as 1; fan-out tools reserve their
-# expected --rate-limit value. Defaults to 1 if unlisted.
+# --rate-limit value. Defaults to 1 if unlisted.
 TOOL_EXPECTED_RPS = {
     'subfinder':   1, 'amass':       1, 'assetfinder': 1,
     'dig':         1, 'whois':       1, 'whatweb':     1,
@@ -140,7 +154,7 @@ def run(
         target:  Target domain/IP (required for network tools)
         timeout: Max execution time in seconds
         cwd:     Working directory (defaults to WORK_DIR)
-        expected_request_per_sec: Budget to reserve against the global cap.
+        expected_request_per_sec: budget to reserve against the global cap.
                  Defaults to TOOL_EXPECTED_RPS[tool] or 1.
 
     Returns:
@@ -167,12 +181,12 @@ def run(
         if not allowed:
             raise ValueError(f'Scope violation: {reason}')
 
-    # 4. Per-tool cooldown (coarse — guards against runaway agent loops)
+    # 4. Per-tool cooldown (coarse guard against runaway agent loops)
     _rate_limit(tool)
 
-    # 5. Global rate cap. Total outbound across ALL bb-hunter tools (every
-    #    zone, every program, every concurrent invocation) must stay
-    #    <= GLOBAL_RATE_LIMIT per second. Local file utilities don't count.
+    # 5. Global rate cap (≤ GLOBAL_RATE_LIMIT req/sec across ALL bb-hunter
+    #    tools, every zone, every program). Network tools only — local file
+    #    utilities don't generate outbound traffic.
     if tool in NETWORK_TOOLS:
         budget = expected_request_per_sec
         if budget is None:

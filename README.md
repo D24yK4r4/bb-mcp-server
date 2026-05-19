@@ -21,9 +21,14 @@ impact-only).
 
 ## What you get
 
-- **27 MCP tools** for recon (subfinder, amass, httpx, nmap, …), web testing
+- **30 MCP tools** for recon (subfinder, amass, httpx, nmap, …), web testing
   (curl, ffuf, feroxbuster, katana), vuln testing (nuclei, sqlmap, dalfox),
   vault lookup, on-demand skill loading, and dual-output report generation.
+- **Validator-agent gate** (`validate_finding` → spawn validator → `record_verdict`
+  → `create_report`). A finding cannot be submitted until a separate agent
+  has independently judged it `EXPLOITABLE` against a structured brief; the
+  verdict is hash-chained to a per-program ledger and resolved server-side
+  at report time. `force=True` does not bypass the gate.
 - **A 60+ pattern sanitizer** that vaults bearer tokens, cookies, JWTs, AWS /
   Azure / GCP creds, SaaS keys (GitHub, Slack, Stripe, Twilio, SendGrid, …),
   PII (names, emails by tier, phone numbers), DB connection strings, private

@@ -1,4 +1,3 @@
-# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0
 """
 Output sanitizer — scans tool output for sensitive patterns,
 vaults the values locally, and replaces them with <SAFE:type:id> tokens.
@@ -11,7 +10,9 @@ Three-pass design:
      (userId / programId / fileId / etc.) and re-tag for inline visibility.
 """
 
+import os
 import re
+import time
 from config import REDACT_PATTERNS, MAX_OUTPUT_LINES, MAX_OUTPUT_BYTES, BB_ROOT
 from vault import safe as vault
 
@@ -174,22 +175,66 @@ def sanitize(output: str, program: str, source: str) -> str:
             return f'{prefix}<SAFE:{_t}:{safe_id}>{suffix}'
         result = pat.sub(_retag, result)
 
-    return _truncate(result)
+    return _truncate(result, program=program, source=source)
 
 
-def _truncate(output: str) -> str:
+def _source_slug(source: str) -> str:
+    """Derive a short filename-safe slug from the source command string."""
+    # Take the first token (the command) + first ~25 chars of the rest
+    s = re.sub(r'[^A-Za-z0-9_.-]+', '_', source).strip('_')
+    return (s[:48] or 'output')
+
+
+def _save_full(output: str, program: str, source: str) -> str:
+    """
+    Save the full (already-sanitized) output to programs/<program>/recon/.
+    Returns the relative path string to embed in the truncation notice, or ''
+    on failure (caller falls back to a generic note).
+    """
+    try:
+        recon_dir = BB_ROOT / 'programs' / program / 'recon'
+        recon_dir.mkdir(parents=True, exist_ok=True)
+        ts = time.strftime('%Y%m%dT%H%M%S')
+        path = recon_dir / f'dropped_{_source_slug(source)}_{ts}.txt'
+        # Avoid clobbering on rapid same-second invocations
+        if path.exists():
+            path = recon_dir / f'dropped_{_source_slug(source)}_{ts}_{os.getpid()}.txt'
+        path.write_text(output, encoding='utf-8')
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+        rel = path.relative_to(BB_ROOT)
+        return str(rel)
+    except Exception:
+        return ''
+
+
+def _truncate(output: str, program: str = '', source: str = '') -> str:
     lines = output.splitlines()
-    truncated = False
 
-    if len(lines) > MAX_OUTPUT_LINES:
-        kept   = lines[:MAX_OUTPUT_LINES]
+    over_lines = len(lines) > MAX_OUTPUT_LINES
+    over_bytes = len(output.encode()) > MAX_OUTPUT_BYTES
+
+    if not (over_lines or over_bytes):
+        return output
+
+    # Save the FULL sanitized output (secrets already vaulted) to recon/
+    saved_path = ''
+    if program:
+        saved_path = _save_full(output, program, source or 'output')
+
+    notice_tail = (
+        f'full output saved to {saved_path}' if saved_path
+        else 'full output not saved (no program context)'
+    )
+
+    if over_lines:
+        kept = lines[:MAX_OUTPUT_LINES]
         dropped = len(lines) - MAX_OUTPUT_LINES
-        kept.append(f'[... {dropped} lines truncated — full output saved to recon/ file]')
-        output = '\n'.join(kept)
-        truncated = True
+        kept.append(f'[... {dropped} lines truncated — {notice_tail}]')
+        return '\n'.join(kept)
 
-    if len(output.encode()) > MAX_OUTPUT_BYTES and not truncated:
-        output = output.encode()[:MAX_OUTPUT_BYTES].decode(errors='ignore')
-        output += '\n[... output truncated — full output saved to recon/ file]'
-
-    return output
+    # over_bytes only
+    clipped = output.encode()[:MAX_OUTPUT_BYTES].decode(errors='ignore')
+    return clipped + f'\n[... output truncated — {notice_tail}]'

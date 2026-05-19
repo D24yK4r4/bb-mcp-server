@@ -1,4 +1,3 @@
-# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0
 """
 Stage 2 — Integration Tests
 Tests the full pipeline: executor → sanitizer → vault → audit
@@ -220,8 +219,8 @@ except ValueError as e:
 section('6. RATE LIMITING — verify delay between tool calls')
 
 # Force rate limit state to 0 for this test
-from core.executor import _last_run
-_last_run['dig'] = 0.0
+import core.executor as executor_mod
+executor_mod._last_run['dig'] = 0.0
 
 t1 = time.monotonic()
 dig('google.com', 'A', PROGRAM)

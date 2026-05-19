@@ -1,4 +1,3 @@
-# SPDX-License-Identifier: EUPL-1.2 OR AGPL-3.0
 """
 Central configuration for the Bug Bounty MCP Server.
 All allowlists, paths, limits, and patterns live here.
@@ -46,6 +45,14 @@ ALLOWED_TOOLS = {
     'grep', 'jq', 'head', 'wc', 'sort', 'uniq', 'cut',
 }
 
+# Pin tools to specific binary paths when name resolution is ambiguous.
+# Example: /usr/bin/httpx is the Python httpx CLI shim (no -l flag); the
+# ProjectDiscovery Go httpx lives at ~/go/bin/httpx and is what the wrappers
+# expect. Override here so shutil.which() can't pick the wrong binary.
+TOOL_PATH_OVERRIDES = {
+    'httpx': str(Path.home() / 'go' / 'bin' / 'httpx'),
+}
+
 BLOCKED_TOOLS = {
     'sudo', 'su', 'bash', 'sh', 'zsh', 'fish', 'dash',
     'python3', 'python', 'perl', 'ruby', 'php',
@@ -81,29 +88,22 @@ SCRIPTS_BLOCKED = {
 #     -rate-limit, dalfox --delay). This is what actually shapes outbound
 #     traffic to the target.
 
-TOOL_RATE_LIMIT = 2  # req/sec — leave headroom under program caps. NEVER raise above 3
-                     # without operator review; CF/WAF aggregate per-zone limits are usually
-                     # lower than the per-app stated limit, and a single 429 risks IP ban.
-                     # Programs that explicitly allow 5–10/sec can override per-program.
+TOOL_RATE_LIMIT = 2  # req/sec — leave headroom under program caps. NEVER raise above 3 without
+                     # operator review; CF/WAF aggregate per-zone limits are usually lower than
+                     # the per-app stated limit, and a single 429 risks IP ban.
 
-# Per-host 429 circuit breaker. Once a host returns 429 (or related throttle
-# signal), refuse further requests to that host AND its parent zone for
-# COOLDOWN_AFTER_429 seconds. State persisted across process restarts.
-COOLDOWN_AFTER_429 = 300            # 5 minutes — long enough for sliding-window throttles to fully reset
-BREAKER_STATE_FILE = '/tmp/bb_429_breaker.json'
+# Circuit breaker: once a host returns 429, refuse further requests to that host
+# (and its parent zone, e.g. *.intigriti.rocks) for COOLDOWN_AFTER_429 seconds.
+# Hard rule per operator: NEVER trigger 429 on any program, on any day.
+COOLDOWN_AFTER_429 = 300  # 5 minutes — long enough for sliding-window throttles to fully reset
+BREAKER_STATE_FILE = "/tmp/bb_429_breaker.json"
 
-# Per-zone aggregate cap. Total requests across all bb-hunter tools to a single
-# zone (e.g. *.example.com) must stay <= SAFE_RATE_PER_ZONE per second.
-# Trailing 1-second window. Tool wrappers can opt in via aggregate_rate_check.
-SAFE_RATE_PER_ZONE = 2              # req/sec aggregate per zone — match TOOL_RATE_LIMIT default
-RATE_TRACKER_FILE  = '/tmp/bb_rate_tracker.json'
-
-# Global rate ceiling. Total outbound across ALL bb-hunter tools (every zone,
-# every program, every concurrent invocation) must stay <= GLOBAL_RATE_LIMIT
-# per second. Enforced inside the executor for every network-tool launch.
-GLOBAL_RATE_LIMIT      = 5          # req/sec aggregate across every tool, every zone
-GLOBAL_RATE_FILE       = '/tmp/bb_global_rate.json'
-GLOBAL_BUDGET_MAX_WAIT = 10         # max seconds to block waiting for budget before refusing
+# Global rate ceiling: total outbound requests across ALL bb-hunter tools must
+# never exceed this many per second, regardless of how many tools are running
+# concurrently or which target they hit. Operator rule: hard cap, no exceptions.
+GLOBAL_RATE_LIMIT = 5  # req/sec aggregate across every tool, every zone
+GLOBAL_RATE_FILE = "/tmp/bb_global_rate.json"
+GLOBAL_BUDGET_MAX_WAIT = 10  # max seconds to block waiting for budget before refusing
 
 RATE_LIMITS: dict[str, float] = {
     'subfinder':    0.2,
@@ -122,9 +122,14 @@ RATE_LIMITS: dict[str, float] = {
 }
 
 # ── Report severity gate ───────────────────────────────────────────────────────
-# Bug-bounty mission is high-impact only. create_report rejects findings below
-# this threshold unless explicitly overridden with force=True.
-MIN_REPORT_SEVERITY = {'high', 'critical', 'exceptional'}
+# Hunt for High/Critical/Exceptional. Mediums ship only when the PoC is "free"
+# (byproduct of in-lane hunting, <30min draft, exploitable class, validator-gate
+# passed) — see ~/.claude/projects/.../memory/feedback_severity_targeting.md.
+# create_report rejects anything below Medium unless explicitly overridden with
+# force=True. Noise-class Mediums (missing headers, clickjacking, self-XSS,
+# rate-limit, SPF/DMARC, cookie flags) must still be dropped at operator level —
+# the gate cannot enforce taxonomy, only the numeric floor.
+MIN_REPORT_SEVERITY = {'medium', 'high', 'critical', 'exceptional'}
 
 # ── Output limits ──────────────────────────────────────────────────────────────
 
@@ -327,4 +332,7 @@ FORBIDDEN_PAYLOAD_PATTERNS = [
 
 # ── Shell metacharacters blocked in arguments ──────────────────────────────────
 
-SHELL_METACHARACTERS = [';', '&&', '||', '`', '$(',  '${',  '>(', '<(', '\n', '\r', '\x00']
+# ';' is inert under shell=False (subprocess list-form) and appears legitimately
+# in HTTP header values (e.g. User-Agent "Mozilla/5.0 (X11; Linux x86_64)").
+# Other metacharacters retained as defense-in-depth.
+SHELL_METACHARACTERS = ['&&', '||', '`', '$(',  '${',  '>(', '<(', '\n', '\r', '\x00']

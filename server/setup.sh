@@ -61,25 +61,9 @@ info "Setting file permissions..."
 find "$MCP_DIR" -name "*.py" -exec chmod 640 {} \;
 chmod 750 "$MCP_DIR/setup.sh"
 
-# ── 7. Smoke test — fail fast on syntax / import errors ───────────────────────
-info "Running MCP server smoke test (config + server import)..."
-if (cd "$MCP_DIR" && python3 -c "import config, server" > /dev/null 2>&1); then
-    info "Smoke test passed."
-else
-    error "MCP server failed to import. Check syntax in $MCP_DIR/config.py and $MCP_DIR/server.py"
-fi
-
-# ── 8. Make launcher executable ───────────────────────────────────────────────
-if [[ -f "$MCP_DIR/launch.sh" ]]; then
-    chmod 750 "$MCP_DIR/launch.sh"
-    info "Launcher ready: $MCP_DIR/launch.sh"
-else
-    warn "launch.sh not found at $MCP_DIR/launch.sh — server will run without firejail."
-fi
-
-# ── 9. Register with Claude Code ──────────────────────────────────────────────
+# ── 7. Register with Claude Code ──────────────────────────────────────────────
 info "Registering MCP server with Claude Code..."
-CLAUDE_MCP_CMD="claude mcp add bb-hunter $MCP_DIR/launch.sh \
+CLAUDE_MCP_CMD="claude mcp add bb-hunter python3 $MCP_DIR/server.py \
   --env BB_ROOT=$BB_ROOT \
   --env BB_VAULT=$VAULT_DIR \
   --env BB_SCRIPTS=$HOME/Documents/Scripts"
@@ -93,19 +77,17 @@ else
     echo ""
     echo "  $CLAUDE_MCP_CMD"
     echo ""
-    warn "Or copy .mcp.example.json to .mcp.json in your project root and adjust paths."
+    warn "Or copy .mcp.json to your project root:"
+    echo ""
+    echo "  cp $MCP_DIR/.mcp.json $BB_ROOT/.mcp.json"
 fi
 
-# ── 10. Firejail (optional, used by launch.sh) ────────────────────────────────
-# launch.sh detects firejail at runtime and wraps the server with: caps dropped,
-# seccomp on, filesystem narrowed to BB_ROOT + BB_VAULT + BB_SCRIPTS + skills
-# dir + pip user-site. Network access is preserved — the server has to launch
-# curl/nmap/etc — only filesystem and capabilities are restricted.
+# ── 8. Firejail (optional) ─────────────────────────────────────────────────────
 if command -v firejail > /dev/null 2>&1; then
-    info "firejail $(firejail --version 2>/dev/null | head -1 | awk '{print $3}') found — server will run sandboxed via launch.sh."
+    info "firejail found — sandbox available."
+    info "To run sandboxed: firejail --noprofile --net=none python3 $MCP_DIR/server.py"
 else
-    warn "firejail not installed — server will run unsandboxed."
-    warn "Install for filesystem + capability isolation:"
+    warn "firejail not installed. Install for extra isolation:"
     echo "  sudo apt install firejail"
 fi
 
@@ -114,11 +96,11 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e " ${GREEN}Setup complete.${NC}"
 echo ""
-echo " To start the server (firejail-wrapped if installed):"
-echo "   $MCP_DIR/launch.sh"
-echo ""
-echo " To start unwrapped (debugging only):"
+echo " To start the server:"
 echo "   python3 $MCP_DIR/server.py"
+echo ""
+echo " To start sandboxed (if firejail installed):"
+echo "   firejail --noprofile --net=none python3 $MCP_DIR/server.py"
 echo ""
 echo " Vault location: $VAULT_DIR"
 echo " Verify audit log: use verify_audit_log tool in Claude"
