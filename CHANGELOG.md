@@ -102,6 +102,36 @@ EUPL-1.2 OR AGPL-3.0, DCO, commercial-licensing option, trademark policy).
 - Updated `README.md`, `CONTRIBUTING.md`, and `SECURITY.md` to reflect the
   new licence terms.
 
+### Fixed
+- **`server/core/verdicts.py`** — replaced an empty `except: pass` in
+  `_last_hash` with a `logger.warning(..., exc_info=True)` that surfaces
+  the parse failure while preserving the genesis-hash fallback. Added a
+  module-level `logger = logging.getLogger(__name__)`. (CodeQL
+  `py/empty-except`.)
+- **`server/core/circuit_breaker.py`** — removed an unused
+  `import os as _os` from the aggregate rate tracker section. (CodeQL
+  `py/unused-import`.)
+- **`server/test_integration.py`** — consolidated the two import styles
+  for `core.executor` into a single `import core.executor as executor_mod`
+  used by both the scope-gate test and the rate-limit test. (CodeQL
+  `py/import-and-import-from`.)
+- **`server/test_server.py`** — collapsed a redundant `saved_path`
+  assignment that was overwritten on the next line, and switched the
+  `BB_ROOT` lookup to module-style `config.BB_ROOT` so the file no
+  longer mixes import styles for `config`. Resolves two findings.
+  (CodeQL `py/multiple-definition` + `py/import-and-import-from`.)
+- **`server/test_validator_gate.py`** — converted the
+  `from core.scope import check as scope_check` and
+  `from core.validator_brief import build_brief` imports into module-style
+  attribute rebindings (`scope_check = core.scope.check`,
+  `build_brief = core.validator_brief.build_brief`) after the
+  `importlib.reload` block. Same call sites, single import style.
+  (CodeQL `py/import-and-import-from` × 2.)
+- Local dev fixture `test_program_pdq_shape` renamed end-to-end to
+  `test_program_carveout_shape` (test labels and example domains use
+  neutral `acme.example` / `widgetcorp.example`) so upstream→public
+  syncs cannot reintroduce the older labels.
+
 ### Compatibility
 - **`create_report` callers must update.** Code that previously called
   `create_report(...)` without a `validator_verdict_id` will now fail

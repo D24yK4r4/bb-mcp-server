@@ -113,7 +113,6 @@ def detect_throttle_in_response(raw_response: str) -> bool:
 # zone must stay under SAFE_RATE_PER_ZONE per second. If a new request would
 # push the trailing-1s window over the limit, refuse it.
 
-import os as _os
 SAFE_RATE_PER_ZONE = 2  # req/sec aggregate cap per zone (intigriti.rocks, etc.)
 RATE_TRACKER_FILE = "/tmp/bb_rate_tracker.json"
 

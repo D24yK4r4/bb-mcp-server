@@ -13,6 +13,7 @@ Lifecycle:
 
 import hashlib
 import json
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
@@ -23,6 +24,8 @@ from config import VAULT_ROOT, FORBIDDEN_PAYLOAD_PATTERNS
 VERDICT_AWAITING    = 'AWAITING'
 VERDICT_EXPLOITABLE = 'EXPLOITABLE'
 VERDICT_THEORETICAL = 'THEORETICAL'
+
+logger = logging.getLogger(__name__)
 
 
 def _verdicts_log(program: str) -> Path:
@@ -43,7 +46,11 @@ def _last_hash(log_path: Path) -> str:
                 entry = json.loads(line)
                 return entry.get('hash', hashlib.sha256(b'genesis').hexdigest())
     except Exception:
-        pass
+        logger.warning(
+            "Failed to read/parse verdicts log at %s; falling back to genesis hash",
+            log_path,
+            exc_info=True,
+        )
     return hashlib.sha256(b'genesis').hexdigest()
 
 

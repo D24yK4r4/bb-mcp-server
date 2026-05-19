@@ -197,10 +197,10 @@ else:
 # ══════════════════════════════════════════════════════════════════════════════
 section('5. SCOPE GATE — executor blocks out-of-scope curl')
 
-from core.executor import run
+import core.executor as executor_mod
 
 try:
-    output, code = run(
+    output, code = executor_mod.run(
         'curl',
         ['-si', '--max-time', '5', 'https://notinscope.example.com/test'],
         program=PROGRAM,
@@ -219,7 +219,6 @@ except ValueError as e:
 section('6. RATE LIMITING — verify delay between tool calls')
 
 # Force rate limit state to 0 for this test
-import core.executor as executor_mod
 executor_mod._last_run['dig'] = 0.0
 
 t1 = time.monotonic()

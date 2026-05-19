@@ -74,8 +74,10 @@ importlib.reload(core.scope)
 importlib.reload(verdicts)
 importlib.reload(core.validator_brief)
 
-from core.scope          import check as scope_check
-from core.validator_brief import build_brief
+# Bind module attributes after reload to keep call sites short while
+# satisfying the import-and-import-from CodeQL hygiene rule.
+scope_check = core.scope.check
+build_brief = core.validator_brief.build_brief
 
 # ══════════════════════════════════════════════════════════════════════════════
 section('1. validate_finding logic — scope gate rejects OOS')

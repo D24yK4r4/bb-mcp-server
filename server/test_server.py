@@ -114,10 +114,8 @@ check('Truncation notice references a real saved path',
       f'Got: {truncated[-200:]}')
 
 if m:
-    saved_path = BB_ROOT_for_test = Path(config.BB_ROOT) / m.group(1) if hasattr(config, 'BB_ROOT') else None
     # config.BB_ROOT is the real BB_ROOT (sanitizer uses it directly)
-    from config import BB_ROOT as _bb
-    saved_path = _bb / m.group(1)
+    saved_path = config.BB_ROOT / m.group(1)
     check(f'Saved recon file exists at {m.group(1)}', saved_path.exists())
     if saved_path.exists():
         content = saved_path.read_text()
