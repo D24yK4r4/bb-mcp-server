@@ -32,15 +32,19 @@ def curl(
     program: str,
     method: str = 'GET',
     headers: list[str] | None = None,
-    data: str | None = None,
+    data: str | dict | None = None,
     flags: list[str] | None = None,
 ) -> str:
     """
     Run curl against a target URL.
     headers: list of 'Header: value' strings
-    data:    POST body (string)
+    data:    POST body (string or dict — dict is auto-serialized as JSON)
     flags:   extra curl flags (from allowlist only)
     """
+    if isinstance(data, dict):
+        import json
+        data = json.dumps(data, separators=(',', ':'))
+
     target_host = _extract_host(url)
 
     # Guard 1: 429 circuit breaker (cooldown after a previous 429)
@@ -74,6 +78,8 @@ def curl(
 
     resolved_headers, hdr_tokens = _resolve_safe(headers or [], program)
     resolved_data, data_tokens = _resolve_safe([data] if data else [], program)
+    resolved_url_list, url_tokens = _resolve_safe([url], program)
+    resolved_url = resolved_url_list[0] if resolved_url_list else url
 
     for h in resolved_headers:
         args += ['-H', h]
@@ -84,7 +90,7 @@ def curl(
     for f in (flags or []):
         args.append(f)
 
-    args.append(url)
+    args.append(resolved_url)
 
     raw, code = run('curl', args, program=program, target=target_host)
 
@@ -98,7 +104,7 @@ def curl(
 
     audit.log(program, 'tool_run', {
         'tool': 'curl', 'url': url, 'method': method, 'returncode': code,
-        'safe_tokens_resolved': hdr_tokens + data_tokens,
+        'safe_tokens_resolved': hdr_tokens + data_tokens + url_tokens,
         'throttled': throttled,
     })
     return sanitize(raw, program, f'curl {method} {url}')

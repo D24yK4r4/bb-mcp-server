@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from mcp.server.fastmcp import FastMCP
 
 from tools import recon, web, vuln, utils
-from core import approver, verdicts
+from core import approver, verdicts, next_action
 from core.scope import check as scope_check
 from core.validator_brief import build_brief as build_validator_brief
 from vault.safe import describe as vault_describe
@@ -357,6 +357,7 @@ def validate_finding(
     target: str,
     evidence: str,
     proposed_poc: str,
+    class_hint: str | None = None,
 ) -> str:
     """
     Open a verdict for a finding hypothesis. Returns verdict_id + a markdown
@@ -369,16 +370,28 @@ def validate_finding(
     After the Opus Agent returns its verdict, the operator must call
     record_verdict(verdict_id, ...) to finalize. create_report later requires
     a finalized EXPLOITABLE verdict_id from the same program.
+
+    class_hint (v0.4.0, optional): explicit vuln-class name to inject the
+    matching reference/disclosed_patterns/hunt-<class>.md into the brief.
+    When omitted, the class is auto-detected from the hypothesis text.
+    Valid values: xss, sqli, idor, ssrf, ssti, xxe, rce, oauth, saml,
+    mfa-bypass, csrf, business-logic, cache-poison, file-upload,
+    http-smuggling, graphql.
     """
     # Scope gate
     in_scope, scope_reason = scope_check(target, program)
     if not in_scope:
-        return f'🚫 ERROR: target "{target}" is out of scope ({scope_reason}).'
+        nudge = next_action.suggest(next_action.SCOPE_REJECTED, target=target)
+        return (
+            f'🚫 ERROR: target "{target}" is out of scope ({scope_reason}).\n\n'
+            f'💡 next: {nudge}'
+        )
 
     # Payload-safety gate
     safe, safety_reason = verdicts.safety_check(proposed_poc)
     if not safe:
-        return f'🚫 ERROR: {safety_reason}'
+        nudge = next_action.suggest(next_action.SAFETY_REJECTED)
+        return f'🚫 ERROR: {safety_reason}\n\n💡 next: {nudge}'
 
     # Open the verdict
     verdict_id = verdicts.create(
@@ -396,18 +409,15 @@ def validate_finding(
         evidence=evidence,
         proposed_poc=proposed_poc,
         verdict_id=verdict_id,
+        class_hint=class_hint,
     )
 
+    nudge = next_action.suggest(next_action.VALIDATE_OPENED, verdict_id=verdict_id)
     return (
         f'✅ Verdict opened.\n\n'
         f'verdict_id: {verdict_id}\n'
         f'status: {verdicts.VERDICT_AWAITING}\n\n'
-        f'Next steps for the operator:\n'
-        f'  1. Spawn an Opus Agent (subagent_type=general-purpose, model=opus) '
-        f'with the brief below as the prompt.\n'
-        f'  2. Read the agent\'s verdict (line 1).\n'
-        f'  3. Call record_verdict(verdict_id={verdict_id!r}, verdict=..., '
-        f'reasoning=..., validated_poc=...).\n\n'
+        f'💡 next: {nudge}\n\n'
         f'━━━━━━━━ BRIEF (paste this to the Opus Agent) ━━━━━━━━\n'
         f'{brief}'
     )
@@ -430,13 +440,29 @@ def record_verdict(
     create_report with this verdict_id. After THEORETICAL, the operator must
     archive the lead in notes.md and pivot.
     """
+    normalized = verdict.strip().upper()
     ok, msg = verdicts.record(
         verdict_id=verdict_id,
-        verdict=verdict.strip().upper(),
+        verdict=normalized,
         reasoning=reasoning,
         validated_poc=validated_poc,
     )
-    return ('✅ ' if ok else '🚫 ERROR: ') + msg
+    if not ok:
+        return '🚫 ERROR: ' + msg
+
+    # v0.4.0 — emit next-action suggestion based on outcome.
+    rec = verdicts.get(verdict_id) or {}
+    target = rec.get('target')
+    if 'INSUFFICIENT' in (reasoning or '').upper():
+        nudge_outcome = next_action.VERDICT_INSUFFICIENT
+    elif normalized == verdicts.VERDICT_EXPLOITABLE:
+        nudge_outcome = next_action.VERDICT_EXPLOITABLE
+    else:
+        nudge_outcome = next_action.VERDICT_THEORETICAL
+    nudge = next_action.suggest(
+        nudge_outcome, verdict_id=verdict_id, target=target,
+    )
+    return f'✅ {msg}\n\n💡 next: {nudge}'
 
 
 @mcp.tool()
@@ -561,10 +587,12 @@ def create_report(
 
     from pathlib import Path
     vault_exists = Path(full_path).exists()
+    nudge = next_action.suggest(next_action.REPORT_CREATED)
     return (
         f'Reports generated:\n'
         f'  Sanitized: {sanitized_path}\n'
-        f'  Full (local only): {full_path} [{"✓ written" if vault_exists else "✗ MISSING — vault write failed"}]'
+        f'  Full (local only): {full_path} [{"✓ written" if vault_exists else "✗ MISSING — vault write failed"}]\n\n'
+        f'💡 next: {nudge}'
     )
 
 

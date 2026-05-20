@@ -1,11 +1,20 @@
 """
 Builds the markdown brief that the operator hands to an Opus Agent for verdict.
 Pulls program rules from brief.md and safe-payload patterns from reference/payloads.md.
+
+v0.4.0: also auto-injects reference/disclosed_patterns/hunt-<class>.md when the
+hypothesis names a known vuln class — gives the validator concrete prior-art
+examples instead of relying on abstract criteria alone.
 """
 
 from pathlib import Path
 
 from config import BB_ROOT
+from core import next_action
+
+# Cap for disclosed-pattern injection. Keeps Opus brief tight; the validator
+# only needs representative examples, not the whole catalog.
+_DISCLOSED_PATTERN_CAP = 8000
 
 
 def _read_optional(path: Path, max_chars: int = 8000) -> str:
@@ -18,6 +27,30 @@ def _read_optional(path: Path, max_chars: int = 8000) -> str:
         return f'(error reading {path}: {e})'
 
 
+def _disclosed_patterns_section(class_name: str | None) -> str:
+    """
+    Return a markdown section with disclosed-report prior art for the given
+    vuln class, or an empty string when class_name is None or the file is
+    missing.
+    """
+    if not class_name:
+        return ''
+    path = BB_ROOT / 'reference' / 'disclosed_patterns' / f'hunt-{class_name}.md'
+    if not path.exists():
+        return ''
+    content = _read_optional(path, _DISCLOSED_PATTERN_CAP)
+    return (
+        f'\n---\n\n'
+        f'## Disclosed-report prior art — {class_name}\n\n'
+        f'The hypothesis matched the **{class_name}** class. The following '
+        f'patterns are extracted from public disclosed bug-bounty reports. '
+        f'Use them as concrete prior-art when judging EXPLOITABLE vs '
+        f'THEORETICAL — if the operator\'s evidence matches one of these '
+        f'patterns, the burden of proof for THEORETICAL increases.\n\n'
+        f'{content}\n'
+    )
+
+
 def build_brief(
     program: str,
     hypothesis: str,
@@ -25,9 +58,15 @@ def build_brief(
     evidence: str,
     proposed_poc: str,
     verdict_id: str,
+    class_hint: str | None = None,
 ) -> str:
     brief_md    = _read_optional(BB_ROOT / 'programs' / program / 'brief.md', 8000)
     payloads_md = _read_optional(BB_ROOT / 'reference' / 'payloads.md',       8000)
+
+    # v0.4.0 — auto-detect vuln class from hypothesis (overridden by class_hint
+    # when the operator passes it explicitly).
+    detected_class = class_hint or next_action.detect_class(hypothesis)
+    patterns_section = _disclosed_patterns_section(detected_class)
 
     return f'''# Validator-Agent Brief — {program}
 
@@ -72,7 +111,7 @@ non-destructive PoC.
 
 ## Safe-payload reference
 {payloads_md}
-
+{patterns_section}
 ---
 
 ## Offensive Posture (project-wide rule — bias the THEORETICAL/EXPLOITABLE call honestly)

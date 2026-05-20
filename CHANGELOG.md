@@ -7,6 +7,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-20
+
+Workflow-nudges release. The validator-gate pipeline from v0.3.0 now tells
+the operator what to do next at every stage, and the validator agent itself
+gets sharper context for free: when a finding hypothesis names a known
+vulnerability class, the matching disclosed-report patterns from
+`reference/disclosed_patterns/hunt-<class>.md` are auto-injected into the
+brief. No new MCP tools, no breaking schema changes — every change is
+additive and the existing test suites pass unchanged.
+
+The intent is to cut the "what command should I run next?" tax on operators
+without adding any new orchestration surface. The MCP server already knows
+the state of the workflow; v0.4.0 just makes it say so.
+
+### Added
+- **`server/core/next_action.py`** — pure-function workflow-nudge generator.
+  Two responsibilities: `suggest(outcome, **ctx)` returns the single most
+  useful next slash-command / Agent call as an operator-facing string;
+  `detect_class(hypothesis)` finds the matching disclosed-pattern class
+  from natural-language hypothesis text using an ordered keyword table
+  (longer patterns first so e.g. `http smuggling` beats a hypothetical
+  `http` match). Pure functions, no I/O, no state.
+- **`💡 next: …` suggestion line** appended to the return value of every
+  workflow-completing tool:
+  - `validate_finding` → suggests spawning the Opus Agent with the brief
+    and calling `record_verdict` with the new `verdict_id`.
+  - `record_verdict` (EXPLOITABLE) → suggests `/report` plus the
+    `validator_verdict_id` to pass.
+  - `record_verdict` (THEORETICAL) → suggests archiving in `notes.md` and
+    `/pickup <target>` on a different lane. Refuses to nudge toward a
+    report draft — matches the operator's THEORETICAL-gate discipline.
+  - `record_verdict` (THEORETICAL — INSUFFICIENT JUSTIFICATION) →
+    suggests re-spawning the Opus Agent rather than recording the verdict.
+  - `create_report` → suggests spawning the program-manager subagent for
+    Phase 4 QA (independent CVSS + duplicate-risk re-score).
+  - Scope rejection → suggests `/scope <target>` to re-sync `brief.md`.
+  - Safety-check rejection → points to safe-payload alternatives in
+    `reference/payloads.md`.
+- **Disclosed-report pattern auto-injection** into the validator brief.
+  When the hypothesis matches a known vuln class (XSS / SQLi / IDOR /
+  SSRF / SSTI / XXE / RCE / OAuth / SAML / MFA-bypass / CSRF /
+  business-logic / cache-poison / file-upload / HTTP-smuggling / GraphQL),
+  the contents of `reference/disclosed_patterns/hunt-<class>.md` are
+  embedded in the brief under a "Disclosed-report prior art" section,
+  capped at 8 KB. The validator agent now has concrete public-bug
+  examples to compare the operator's evidence against — sharper input,
+  better EXPLOITABLE-vs-THEORETICAL calibration.
+- **`validate_finding(..., class_hint: str | None = None)`** — optional
+  kwarg lets the operator name the disclosed-pattern class explicitly,
+  bypassing keyword detection. Useful for hypotheses whose class name
+  doesn't appear in the prose. Default `None` falls back to auto-detect;
+  fully backward-compatible.
+- **`server/test_next_action.py`** — 19 unit tests covering every
+  `suggest()` outcome, every `detect_class()` keyword family,
+  specificity ordering, and the validator-brief integration path.
+
+### Changed
+- `server/core/validator_brief.py` — adds the disclosed-patterns section
+  to the rendered brief when a class is detected (or supplied via
+  `class_hint`). Otherwise byte-for-byte identical to v0.3.0 output.
+- `server/server.py` — imports `next_action`; threads `💡 next: <nudge>`
+  into the four workflow tools' return strings. No schema change.
+
+### Fixed (pending patches folded into v0.4.0)
+- **`server/tools/web.py`** — `run_curl` POST body now accepts `dict` and
+  is auto-serialized to compact JSON. Previously string-only, which forced
+  callers to manually `json.dumps()` every POST payload.
+- **`server/tools/web.py`** — URL itself now passes through
+  `_resolve_safe()` alongside headers and body, so `<SAFE:id>` vault
+  tokens embedded in URLs resolve correctly. Previously only header and
+  body tokens were resolved; URL-embedded tokens leaked the raw token
+  string to the wire. Tokens-resolved counter now includes URL tokens.
+
+### Migration
+**None.** All changes are additive:
+- The new `💡 next: …` line is appended after the existing return content;
+  old clients that read the return as a single string see strictly more
+  information.
+- `class_hint` defaults to `None`; existing `validate_finding` callers
+  are unaffected.
+- No new MCP tools, no renamed tools, no removed parameters.
+
+### Tool count
+30 (unchanged from v0.3.0).
+
 ## [0.3.0] - 2026-05-19
 
 Validator-gate release. The biggest change: a server-enforced two-agent
