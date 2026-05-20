@@ -11,11 +11,37 @@ Covers:
 
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 from core import next_action
 from core.validator_brief import build_brief
+
+
+def _parsed_hostnames(text: str) -> list[str]:
+    """
+    Extract hostnames from whitespace-separated tokens in `text` using
+    urlparse semantics. Bare hostnames are parsed by prepending `//`
+    (which makes urlparse treat the token as a netloc). Tokens that
+    don't parse to a valid hostname are dropped.
+
+    Used instead of plain `host in text` substring checks so that
+    e.g. `example.com` does not match `evil-example.com` or
+    `example.community` — avoids the CodeQL "incomplete URL substring
+    sanitization" pattern.
+    """
+    hosts: list[str] = []
+    for token in text.split():
+        # Strip trailing punctuation that would invalidate netloc parsing.
+        stripped = token.rstrip(',.;:!?')
+        if not stripped:
+            continue
+        # urlparse('//host').hostname returns the bare hostname.
+        host = urlparse('//' + stripped).hostname
+        if host:
+            hosts.append(host)
+    return hosts
 
 
 # ── suggest() ─────────────────────────────────────────────────────────────────
@@ -40,7 +66,9 @@ def test_suggest_theoretical_mentions_pickup_and_target():
     )
     assert out is not None
     assert '/pickup' in out
-    assert 'example.com' in out
+    # Parse hosts structurally so 'evil-example.com' / 'example.community'
+    # wouldn't satisfy the assertion (CodeQL: incomplete URL substring sanitization).
+    assert 'example.com' in _parsed_hostnames(out)
     assert 'notes.md' in out
 
 
@@ -69,7 +97,9 @@ def test_suggest_scope_drift_recommends_scope_resync():
     out = next_action.suggest(next_action.SCOPE_DRIFT, target='target.com')
     assert out is not None
     assert '/scope' in out
-    assert 'target.com' in out
+    # Parse hosts structurally so 'evil-target.com' / 'target.community'
+    # wouldn't satisfy the assertion (CodeQL: incomplete URL substring sanitization).
+    assert 'target.com' in _parsed_hostnames(out)
 
 
 def test_suggest_rate_limit_forbids_evasion():
