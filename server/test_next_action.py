@@ -68,7 +68,7 @@ def test_suggest_theoretical_mentions_pickup_and_target():
     assert '/pickup' in out
     # Parse hosts structurally so 'evil-example.com' / 'example.community'
     # wouldn't satisfy the assertion (CodeQL: incomplete URL substring sanitization).
-    assert 'example.com' in _parsed_hostnames(out)
+    assert any(h == 'example.com' for h in _parsed_hostnames(out))
     assert 'notes.md' in out
 
 
@@ -99,7 +99,7 @@ def test_suggest_scope_drift_recommends_scope_resync():
     assert '/scope' in out
     # Parse hosts structurally so 'evil-target.com' / 'target.community'
     # wouldn't satisfy the assertion (CodeQL: incomplete URL substring sanitization).
-    assert 'target.com' in _parsed_hostnames(out)
+    assert any(h == 'target.com' for h in _parsed_hostnames(out))
 
 
 def test_suggest_rate_limit_forbids_evasion():
